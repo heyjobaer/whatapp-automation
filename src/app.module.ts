@@ -68,7 +68,14 @@ if (process.env.MCP_ENABLED === 'true') {
 // absent, so this stays inert and the Vite dev server (:2886) handles the UI. Opt out
 // explicitly with SERVE_DASHBOARD=false. The path + flags are exported so main.ts can
 // log a clear status line (served / disabled / build missing) at startup.
-export const DASHBOARD_DIST = path.resolve(__dirname, '..', 'dashboard', 'dist');
+// The dashboard was rewritten in Angular (dashboard-ng); its build output lives under
+// dist/dashboard-ng/browser. Prefer it, falling back to the legacy React build (dashboard/dist)
+// when the Angular build is absent so a half-migrated checkout still serves a UI.
+const ANGULAR_DASHBOARD_DIST = path.resolve(__dirname, '..', 'dashboard-ng', 'dist', 'dashboard-ng', 'browser');
+const LEGACY_DASHBOARD_DIST = path.resolve(__dirname, '..', 'dashboard', 'dist');
+export const DASHBOARD_DIST = fs.existsSync(path.join(ANGULAR_DASHBOARD_DIST, 'index.html'))
+  ? ANGULAR_DASHBOARD_DIST
+  : LEGACY_DASHBOARD_DIST;
 export const dashboardServingEnabled = process.env.SERVE_DASHBOARD !== 'false';
 export const dashboardBuildPresent = fs.existsSync(path.join(DASHBOARD_DIST, 'index.html'));
 
