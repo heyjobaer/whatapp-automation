@@ -1,0 +1,240 @@
+@if (loadingSessions()) {
+  <div class="templates-page templates-loading">
+    <lucide-icon name="loader-2" class="animate-spin" [size]="32" />
+  </div>
+} @else {
+  <div class="templates-page">
+    @if (toast(); as t) {
+      <div class="toast {{ t.type }}">
+        <lucide-icon [name]="t.type === 'success' ? 'check' : 'alert-triangle'" [size]="18" />
+        <span>{{ t.message }}</span>
+        <button class="toast-close" (click)="toast.set(null)" [attr.aria-label]="'common.close' | translate">
+          <lucide-icon name="x" [size]="16" />
+        </button>
+      </div>
+    }
+
+    <app-page-header [title]="'templates.title' | translate" [subtitle]="'templates.subtitle' | translate">
+      <div actions>
+        <select class="templates-session-select" [ngModel]="selectedSessionId()" (ngModelChange)="onSessionChange($event)">
+          @if (sessions().length === 0) {
+            <option value="">{{ 'templates.noSessions' | translate }}</option>
+          }
+          @for (session of sessions(); track session.id) {
+            <option [value]="session.id">{{ session.name }}</option>
+          }
+        </select>
+      </div>
+    </app-page-header>
+
+    @if (sessions().length === 0) {
+      <div class="templates-empty-page">
+        <lucide-icon name="file-text" [size]="48" [strokeWidth]="1" />
+        <h3>{{ 'templates.empty.noSessionsTitle' | translate }}</h3>
+        <p>{{ 'templates.empty.noSessionsDesc' | translate }}</p>
+      </div>
+    } @else {
+      <div class="templates-workspace">
+        <aside class="templates-library">
+          <div class="templates-library-header">
+            <div>
+              <h2>{{ 'templates.savedTitle' | translate }}</h2>
+              <span>{{ 'templates.count' | translate: { count: templates().length } }}</span>
+            </div>
+            <button class="btn-primary templates-new-btn" (click)="resetForm()" [disabled]="!auth.canWrite()">
+              <lucide-icon name="plus" [size]="16" />
+              {{ 'templates.newTemplate' | translate }}
+            </button>
+          </div>
+
+          <div class="templates-search">
+            <lucide-icon name="search" [size]="16" />
+            <input
+              [ngModel]="searchTerm()"
+              (ngModelChange)="searchTerm.set($event)"
+              [placeholder]="'common.search' | translate"
+            />
+          </div>
+
+          @if (loadingTemplates()) {
+            <div class="templates-loading-inline">
+              <lucide-icon name="loader-2" class="animate-spin" [size]="24" />
+            </div>
+          } @else if (templates().length === 0) {
+            <div class="templates-empty-list">
+              <lucide-icon name="file-text" [size]="40" [strokeWidth]="1" />
+              <h3>{{ 'templates.empty.title' | translate }}</h3>
+              <p>{{ 'templates.empty.description' | translate }}</p>
+            </div>
+          } @else if (filteredTemplates().length === 0) {
+            <div class="templates-empty-list compact">
+              <lucide-icon name="search" [size]="32" [strokeWidth]="1.5" />
+              <h3>{{ 'templates.empty.title' | translate }}</h3>
+            </div>
+          } @else {
+            <div class="template-list" role="list">
+              @for (template of filteredTemplates(); track template.id) {
+                <button
+                  class="template-list-item"
+                  [class.selected]="editingTemplate()?.id === template.id"
+                  (click)="openEdit(template)"
+                  type="button"
+                >
+                  <span class="template-list-title">{{ template.name }}</span>
+                  <span class="template-list-body">{{ template.body }}</span>
+                  <span class="template-list-meta">{{ templatePlaceholderSummary(template) }}</span>
+                </button>
+              }
+            </div>
+          }
+        </aside>
+
+        <section class="template-editor">
+          <div class="template-editor-header">
+            <div>
+              <h2>{{ (editingTemplate() ? 'templates.editTitle' : 'templates.createTitle') | translate }}</h2>
+              <p>
+                {{ selectedSession() ? ('templates.sessionHint' | translate: { name: selectedSession()!.name }) : '' }}
+              </p>
+            </div>
+            <div class="template-header-actions">
+              @if (editingTemplate(); as editing) {
+                <button
+                  class="icon-btn"
+                  [title]="'templates.actions.copyName' | translate"
+                  (click)="copyName(editing.name)"
+                  type="button"
+                >
+                  <lucide-icon name="copy" [size]="16" />
+                </button>
+                @if (auth.canWrite()) {
+                  <button
+                    class="icon-btn danger"
+                    [title]="'common.delete' | translate"
+                    (click)="deleteTarget.set(editing)"
+                    type="button"
+                  >
+                    <lucide-icon name="trash-2" [size]="16" />
+                  </button>
+                }
+              }
+            </div>
+          </div>
+
+          <div class="template-form">
+            <div class="form-group">
+              <label>{{ 'common.name' | translate }}</label>
+              <input
+                [ngModel]="form().name"
+                (ngModelChange)="patchForm({ name: $event })"
+                [placeholder]="'templates.namePlaceholder' | translate"
+                [disabled]="!auth.canWrite()"
+              />
+            </div>
+
+            <div class="template-message-fields">
+              <div class="form-group">
+                <label>{{ 'templates.header' | translate }}</label>
+                <input
+                  [ngModel]="form().header"
+                  (ngModelChange)="patchForm({ header: $event })"
+                  [placeholder]="'templates.headerPlaceholder' | translate"
+                  [disabled]="!auth.canWrite()"
+                />
+              </div>
+
+              <div class="form-group body-field">
+                <label>{{ 'templates.body' | translate }}</label>
+                <textarea
+                  [ngModel]="form().body"
+                  (ngModelChange)="patchForm({ body: $event })"
+                  [placeholder]="'templates.bodyPlaceholder' | translate"
+                  rows="10"
+                  [disabled]="!auth.canWrite()"
+                ></textarea>
+              </div>
+
+              <div class="form-group">
+                <label>{{ 'templates.footer' | translate }}</label>
+                <input
+                  [ngModel]="form().footer"
+                  (ngModelChange)="patchForm({ footer: $event })"
+                  [placeholder]="'templates.footerPlaceholder' | translate"
+                  [disabled]="!auth.canWrite()"
+                />
+              </div>
+            </div>
+
+            <div class="template-editor-actions">
+              <button class="btn-secondary" (click)="resetForm()" [disabled]="isSaving()" type="button">
+                {{ 'common.cancel' | translate }}
+              </button>
+              <button class="btn-primary" (click)="handleSave()" [disabled]="saveDisabled()" type="button">
+                <lucide-icon [name]="isSaving() ? 'loader-2' : 'plus'" [size]="18" [class.animate-spin]="isSaving()" />
+                {{
+                  (auth.canWrite()
+                    ? editingTemplate()
+                      ? 'templates.saveChanges'
+                      : 'templates.createTemplate'
+                    : 'templates.viewOnly'
+                  ) | translate
+                }}
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <aside class="template-preview">
+          <div class="template-preview-header">
+            <h2>{{ 'templates.previewTitle' | translate }}</h2>
+            <span>{{ placeholders().length }}</span>
+          </div>
+          <div class="template-preview-message">
+            <pre>{{ preview() || ('templates.previewEmpty' | translate) }}</pre>
+          </div>
+          <div class="template-variable-panel">
+            @if (placeholders().length > 0) {
+              <div class="placeholder-list">
+                @for (key of placeholders(); track key) {
+                  <label>
+                    <span>{{ '{{' + key + '}}' }}</span>
+                    <input
+                      [ngModel]="previewValues()[key] || ''"
+                      (ngModelChange)="setPreviewValue(key, $event)"
+                      [placeholder]="'templates.previewValuePlaceholder' | translate"
+                    />
+                  </label>
+                }
+              </div>
+            } @else {
+              <p class="template-muted">{{ 'templates.noPlaceholders' | translate }}</p>
+            }
+          </div>
+        </aside>
+      </div>
+    }
+
+    @if (deleteTarget(); as target) {
+      <div class="modal-overlay" (click)="deleteTarget.set(null)">
+        <div class="modal modal-sm" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h2>{{ 'templates.deleteTitle' | translate }}</h2>
+            <button class="btn-icon" (click)="deleteTarget.set(null)">
+              <lucide-icon name="x" [size]="20" />
+            </button>
+          </div>
+          <div class="modal-body">
+            <p>{{ 'templates.deleteConfirm' | translate: { name: target.name } }}</p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" (click)="deleteTarget.set(null)">{{ 'common.cancel' | translate }}</button>
+            <button class="btn-danger" (click)="handleDelete()" [disabled]="isDeleting()">
+              <lucide-icon [name]="isDeleting() ? 'loader-2' : 'trash-2'" [size]="18" [class.animate-spin]="isDeleting()" />
+              {{ 'common.delete' | translate }}
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+}

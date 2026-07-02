@@ -1,0 +1,178 @@
+<div class="layout">
+  @if (isMobile()) {
+    <header class="mobile-header">
+      <button class="mobile-menu-btn" (click)="toggleMobile()" [attr.aria-label]="'common.expand' | translate">
+        <lucide-icon [name]="isMobileOpen() ? 'x' : 'menu'" [size]="24" />
+      </button>
+      <div class="mobile-brand">
+        <img src="/openwa_logo.webp" alt="OpenWA" class="sidebar-logo" />
+        <span class="brand-name">{{ 'common.appName' | translate }}</span>
+      </div>
+      <div style="width: 40px"></div>
+    </header>
+  }
+
+  @if (isMobile() && isMobileOpen()) {
+    <div class="sidebar-overlay" (click)="setMobileOpen(false)"></div>
+  }
+
+  <aside
+    class="sidebar"
+    [class.collapsed]="isCollapsed()"
+    [class.mobile]="isMobile()"
+    [class.open]="isMobileOpen()"
+  >
+    <div class="sidebar-header">
+      <img src="/openwa_logo.webp" alt="OpenWA" class="sidebar-logo" />
+      @if (!isCollapsed()) {
+        <div class="sidebar-brand">
+          <span class="brand-name">{{ 'common.appName' | translate }}</span>
+          <span class="brand-version">v{{ version() }}</span>
+        </div>
+      }
+    </div>
+
+    @if (!isMobile()) {
+      <button
+        class="collapse-toggle"
+        (click)="toggleCollapse()"
+        [title]="(isCollapsed() ? 'common.expand' : 'common.collapse') | translate"
+        [attr.aria-label]="(isCollapsed() ? 'common.expand' : 'common.collapse') | translate"
+      >
+        @if (isCollapsed()) {
+          <lucide-icon [name]="isRtl() ? 'chevron-left' : 'chevron-right'" [size]="16" />
+        } @else {
+          <lucide-icon [name]="isRtl() ? 'chevron-right' : 'chevron-left'" [size]="16" />
+        }
+      </button>
+    }
+
+    <nav class="sidebar-nav">
+      @for (item of navItems(); track item.to) {
+        <a
+          [routerLink]="item.to"
+          routerLinkActive="active"
+          [routerLinkActiveOptions]="{ exact: item.to === '/' }"
+          class="nav-item"
+          (click)="handleNavClick()"
+          [title]="isCollapsed() ? ('nav.' + item.key | translate) : null"
+        >
+          <lucide-icon [name]="item.icon" [size]="20" />
+          @if (!isCollapsed()) {
+            <span>{{ 'nav.' + item.key | translate }}</span>
+          }
+        </a>
+      }
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="language-menu" #languageMenu>
+        <button
+          class="theme-toggle-btn"
+          (click)="isLanguageMenuOpen.set(!isLanguageMenuOpen())"
+          [title]="'common.language' | translate"
+          [attr.aria-label]="'common.language' | translate"
+          aria-haspopup="menu"
+          [attr.aria-expanded]="isLanguageMenuOpen()"
+        >
+          <lucide-icon name="languages" [size]="18" />
+          @if (!isCollapsed()) {
+            <span>{{ languageLabel() }}</span>
+          }
+        </button>
+        @if (isLanguageMenuOpen()) {
+          <div class="language-menu-list" role="menu" [attr.aria-label]="'common.language' | translate">
+            @for (option of lang.languageOptions; track option.value) {
+              <button
+                class="language-menu-item"
+                [class.active]="option.value === lang.current()"
+                (click)="changeLanguage(option.value)"
+                role="menuitemradio"
+                [attr.aria-checked]="option.value === lang.current()"
+              >
+                <span>{{ option.label }}</span>
+              </button>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="appearance-menu" #appearanceMenu>
+        <button
+          class="theme-toggle-btn"
+          (click)="isAppearanceMenuOpen.set(!isAppearanceMenuOpen())"
+          [title]="'theme.label' | translate: { value: ('theme.' + theme.theme() | translate) }"
+          [attr.aria-label]="'theme.appearance' | translate"
+          aria-haspopup="menu"
+          [attr.aria-expanded]="isAppearanceMenuOpen()"
+        >
+          <span class="appearance-button-cue" [style.--swatch-color]="activePalette().color" aria-hidden="true">
+            <lucide-icon [name]="themeIcons[theme.theme()]" [size]="14" />
+          </span>
+          @if (!isCollapsed()) {
+            <span>{{ 'theme.' + theme.theme() | translate }}</span>
+          }
+        </button>
+        @if (isAppearanceMenuOpen()) {
+          <div class="appearance-menu-list" role="menu" [attr.aria-label]="'theme.appearance' | translate">
+            <div class="appearance-menu-header">
+              <div>
+                <strong>{{ 'theme.appearance' | translate }}</strong>
+                <span>{{ activePalette().label }}</span>
+              </div>
+              <span class="appearance-current-swatch" [style.--swatch-color]="activePalette().color" aria-hidden="true"></span>
+            </div>
+            <div class="appearance-section">
+              <span class="appearance-section-label">{{ 'theme.mode' | translate }}</span>
+              <div class="appearance-mode-grid">
+                @for (mode of themeModes; track mode) {
+                  <button
+                    class="appearance-mode"
+                    [class.active]="theme.theme() === mode"
+                    (click)="theme.setTheme(mode)"
+                    type="button"
+                    role="menuitemradio"
+                    [attr.aria-checked]="theme.theme() === mode"
+                  >
+                    <lucide-icon [name]="themeIcons[mode]" [size]="16" />
+                    <span>{{ 'theme.' + mode | translate }}</span>
+                  </button>
+                }
+              </div>
+            </div>
+            <div class="appearance-section">
+              <span class="appearance-section-label">{{ 'theme.palette' | translate }}</span>
+              <div class="palette-grid">
+                @for (option of theme.paletteOptions; track option.value) {
+                  <button
+                    class="palette-swatch"
+                    [class.active]="theme.palette() === option.value"
+                    (click)="theme.setPalette(option.value)"
+                    type="button"
+                    [title]="option.label"
+                    role="menuitemradio"
+                    [attr.aria-checked]="theme.palette() === option.value"
+                    [style.--swatch-color]="option.color"
+                  >
+                    <span></span>
+                  </button>
+                }
+              </div>
+            </div>
+          </div>
+        }
+      </div>
+
+      <button class="logout-btn" (click)="logout()" [title]="isCollapsed() ? ('common.logout' | translate) : null">
+        <lucide-icon name="log-out" [size]="20" />
+        @if (!isCollapsed()) {
+          <span>{{ 'common.logout' | translate }}</span>
+        }
+      </button>
+    </div>
+  </aside>
+
+  <main class="main-content" [class.expanded]="isCollapsed()" [class.mobile]="isMobile()">
+    <router-outlet />
+  </main>
+</div>

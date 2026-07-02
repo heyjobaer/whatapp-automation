@@ -1,0 +1,78 @@
+<div class="login-container">
+  <div class="login-card">
+    <div class="login-logo">
+      <img src="/openwa_logo.webp" alt="OpenWA" class="logo-icon" />
+      <span class="version-info">
+        {{ 'login.version' | translate: { version: appVersion, date: buildDate } }}
+      </span>
+    </div>
+
+    <div class="login-language">
+      <lucide-icon name="languages" [size]="18" />
+      <select
+        [value]="lang.current()"
+        (change)="changeLanguage($any($event.target).value)"
+        [attr.aria-label]="'common.language' | translate"
+      >
+        @for (option of lang.languageOptions; track option.value) {
+          <option [value]="option.value">{{ option.label }}</option>
+        }
+      </select>
+    </div>
+
+    <form (ngSubmit)="handleSubmit()" class="login-form">
+      <div class="input-group">
+        <label for="apiKey">{{ 'login.apiKey' | translate }}</label>
+        <div class="input-wrapper">
+          <input
+            id="apiKey"
+            name="apiKey"
+            [type]="showKey() ? 'text' : 'password'"
+            [(ngModel)]="apiKey"
+            [placeholder]="'login.apiKeyPlaceholder' | translate"
+            [class.error]="error()"
+          />
+          <button
+            type="button"
+            class="toggle-visibility"
+            (click)="showKey.set(!showKey())"
+            [attr.aria-label]="(showKey() ? 'common.hideApiKey' : 'common.showApiKey') | translate"
+          >
+            <lucide-icon [name]="showKey() ? 'eye-off' : 'eye'" [size]="20" />
+          </button>
+        </div>
+        @if (error()) {
+          <span class="error-message">{{ error() }}</span>
+        }
+      </div>
+
+      <button type="submit" class="connect-btn" [disabled]="isLoading()">
+        {{ (isLoading() ? 'login.connecting' : 'login.connect') | translate }}
+      </button>
+    </form>
+
+    <p class="login-help">
+      {{ 'login.help' | translate }}
+      <a
+        href="https://github.com/rmyndharis/OpenWA/blob/main/docs/01-project-overview.md"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        {{ 'login.viewDocs' | translate }}
+      </a>
+    </p>
+  </div>
+
+  <footer class="login-footer">
+    <span>{{ 'login.footer' | translate }}</span>
+    <a
+      href="https://github.com/rmyndharis/OpenWA"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="github-link"
+      aria-label="GitHub"
+    >
+      <app-github-icon [size]="18" />
+    </a>
+  </footer>
+</div>

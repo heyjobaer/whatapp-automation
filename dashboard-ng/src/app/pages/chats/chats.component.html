@@ -1,0 +1,386 @@
+<div class="chats-page">
+  <app-page-header [title]="'nav.chats' | translate" [subtitle]="'chats.subtitle' | translate" />
+
+  @if (socket.connectionFailed()) {
+    <div class="chats-reconnect-banner" role="alert">
+      <lucide-icon name="alert-circle" [size]="16" />
+      <span>{{ 'common.disconnected' | translate }}</span>
+      <button class="btn-secondary" (click)="socket.reconnect()">{{ 'common.refresh' | translate }}</button>
+    </div>
+  }
+
+  @if (loadingSessions()) {
+    <div class="chats-loading-container">
+      <lucide-icon name="loader-2" class="animate-spin" [size]="32" />
+      <p>{{ 'common.loading' | translate }}</p>
+    </div>
+  } @else if (sessions().length === 0) {
+    <div class="chats-error-state">
+      <lucide-icon name="alert-circle" [size]="48" class="text-warn" />
+      <h3>{{ 'chats.noSessionsTitle' | translate }}</h3>
+      <p [innerHTML]="'chats.noSessionsDesc' | translate"></p>
+    </div>
+  } @else {
+    <div class="chats-layout" [class.has-active-chat]="activeChat()">
+      <!-- LEFT SIDEBAR: session & chat rooms -->
+      <aside class="chats-sidebar">
+        <div class="sidebar-header-box">
+          <div class="session-select-group">
+            <label class="form-label">{{ 'chats.sessionLabel' | translate }}</label>
+            <select
+              [ngModel]="selectedSessionId()"
+              (ngModelChange)="selectedSessionId.set($event)"
+              class="session-selector"
+            >
+              @for (s of sessions(); track s.id) {
+                <option [value]="s.id">{{ s.name }} ({{ s.phone || ('chats.noPhone' | translate) }})</option>
+              }
+            </select>
+          </div>
+
+          <div class="chat-search-input">
+            <lucide-icon name="search" [size]="18" />
+            <input
+              type="text"
+              [placeholder]="'chats.searchPlaceholder' | translate"
+              [(ngModel)]="searchQuery"
+              (ngModelChange)="searchTick.set(searchTick() + 1)"
+            />
+          </div>
+        </div>
+
+        <div class="chats-list">
+          @if (loadingChats()) {
+            <div class="chats-list-loading">
+              <lucide-icon name="loader-2" class="animate-spin" [size]="24" />
+              <span>{{ 'chats.loadingChats' | translate }}</span>
+            </div>
+          } @else if (filteredChats().length === 0) {
+            <div class="chats-list-empty">
+              <span>{{ 'chats.empty' | translate }}</span>
+            </div>
+          } @else {
+            @for (chat of filteredChats(); track chat.id) {
+              <div class="chat-item-card" [class.active]="activeChat()?.id === chat.id" (click)="selectChat(chat)">
+                <div class="chat-avatar">
+                  <lucide-icon [name]="chat.isGroup ? 'users' : 'user'" [size]="20" />
+                </div>
+
+                <div class="chat-item-info">
+                  <div class="chat-item-top">
+                    <span class="chat-item-name" [title]="chat.name || chat.id">{{ chatDisplayName(chat) }}</span>
+                    @if (chat.timestamp) {
+                      <span class="chat-item-time">{{ formatChatTime(chat.timestamp) }}</span>
+                    }
+                  </div>
+                  <div class="chat-item-bottom">
+                    <span class="chat-item-snippet" [title]="chat.lastMessage || ''">
+                      @if (chat.lastMessage) {
+                        {{ chat.lastMessage }}
+                      } @else {
+                        <span class="no-message">{{ 'chats.noMessageYet' | translate }}</span>
+                      }
+                    </span>
+                    @if (chat.unreadCount > 0) {
+                      <span class="chat-unread-badge">{{ chat.unreadCount }}</span>
+                    }
+                  </div>
+                </div>
+              </div>
+            }
+          }
+        </div>
+      </aside>
+
+      <!-- RIGHT VIEW: active chat room -->
+      <main class="chats-room">
+        @if (activeChat(); as chat) {
+          <div class="room-container">
+            <header class="room-header">
+              <button class="room-back" (click)="closeChat()" [attr.aria-label]="'common.back' | translate">
+                <lucide-icon name="arrow-left" [size]="20" />
+              </button>
+              <div class="room-avatar">
+                <lucide-icon [name]="chat.isGroup ? 'users' : 'user'" [size]="20" />
+              </div>
+              <div class="room-contact-info">
+                <h3>{{ chatDisplayName(chat) }}</h3>
+                <span>{{ chat.id }}</span>
+              </div>
+            </header>
+
+            <div class="room-messages" #messagesContainer>
+              @if (loadingMessages()) {
+                <div class="messages-loading">
+                  <lucide-icon name="loader-2" class="animate-spin" [size]="32" />
+                  <span>{{ 'chats.loadingMessages' | translate }}</span>
+                </div>
+              } @else if (messagesError()) {
+                <div class="messages-empty">
+                  <lucide-icon name="message-square" [size]="32" />
+                  <span>{{ 'chats.loadMessagesError' | translate }}</span>
+                </div>
+              } @else if (messages().length === 0) {
+                <div class="messages-empty">
+                  <lucide-icon name="message-square" [size]="32" />
+                  <span>{{ 'chats.noMessagesInChat' | translate }}</span>
+                </div>
+              } @else {
+                @for (msg of messages(); track msg.id) {
+                  <div class="message-bubble-wrapper" [class.outgoing]="msg.direction === 'outgoing'" [class.incoming]="msg.direction !== 'outgoing'">
+                    <div class="message-bubble-container">
+                      <div
+                        class="message-bubble {{ msg.direction === 'outgoing' ? 'outgoing' : 'incoming' }} {{ msg.status }}"
+                        [class.media-type]="msg.type !== 'text'"
+                        [class.revoked-type]="msg.type === 'revoked'"
+                      >
+                        @if (msg.metadata?.quotedMessage; as quoted) {
+                          <div class="message-quote-box">
+                            <app-message-body [text]="quoted.body" className="quote-body" />
+                          </div>
+                        }
+
+                        <!-- Media -->
+                        @if (msg.type !== 'revoked') {
+                          @if (msg.type === 'location') {
+                            <div class="message-location">
+                              @if (locationThumb(msg)) {
+                                <img
+                                  [src]="locationThumb(msg)"
+                                  alt=""
+                                  style="max-width: 220px; border-radius: 8px; display: block; margin-bottom: 4px"
+                                />
+                              }
+                              <span class="message-media-omitted">📍 {{ 'chats.media.location' | translate }}</span>
+                            </div>
+                          } @else if (msg.type === 'call') {
+                            <div class="message-media-omitted">{{ callLabel(msg) }}</div>
+                          } @else if (msg.metadata?.media; as mediaInfo) {
+                            @if (mediaInfo.omitted) {
+                              <div class="message-media-omitted">📎 {{ 'chats.media.omitted' | translate }}</div>
+                            } @else if (getMediaSrc(mediaInfo)) {
+                              @switch (msg.type) {
+                                @case ('image') {
+                                  <div class="message-media-image">
+                                    <img
+                                      [src]="getMediaSrc(mediaInfo)"
+                                      [alt]="mediaInfo.filename || ('chats.media.image' | translate)"
+                                      class="chat-image-media"
+                                      (click)="openLightbox(msg)"
+                                    />
+                                  </div>
+                                }
+                                @case ('sticker') {
+                                  <div class="message-media-image">
+                                    <img
+                                      [src]="getMediaSrc(mediaInfo)"
+                                      [alt]="mediaInfo.filename || ('chats.media.image' | translate)"
+                                      class="chat-image-media"
+                                    />
+                                  </div>
+                                }
+                                @case ('video') {
+                                  <div class="message-media-video">
+                                    <video [src]="getMediaSrc(mediaInfo)" controls class="chat-video-media"></video>
+                                  </div>
+                                }
+                                @case ('audio') {
+                                  <div class="message-media-audio">
+                                    <audio [src]="getMediaSrc(mediaInfo)" controls class="chat-audio-media"></audio>
+                                  </div>
+                                }
+                                @case ('voice') {
+                                  <div class="message-media-audio">
+                                    <audio [src]="getMediaSrc(mediaInfo)" controls class="chat-audio-media"></audio>
+                                  </div>
+                                }
+                                @default {
+                                  <div class="message-media-document">
+                                    <a
+                                      [href]="getMediaSrc(mediaInfo)"
+                                      [download]="mediaInfo.filename || 'document'"
+                                      class="chat-document-media"
+                                    >
+                                      📎 {{ mediaInfo.filename || ('chats.downloadDocument' | translate) }}
+                                    </a>
+                                  </div>
+                                }
+                              }
+                            }
+                          }
+                        }
+
+                        @if (msg.type === 'revoked') {
+                          <div class="message-text">{{ 'chats.messageDeleted' | translate }}</div>
+                        } @else if (showBody(msg)) {
+                          <app-message-body [text]="msg.body" className="message-text" />
+                        }
+
+                        <div class="message-meta">
+                          <span class="message-time">{{ formatTime(msg) }}</span>
+                          @if (msg.direction === 'outgoing') {
+                            <span class="message-status-icon {{ msg.status }}">{{ statusTick(msg.status) }}</span>
+                          }
+                        </div>
+
+                        @if (reactionCount(msg) > 0) {
+                          <div class="message-reactions-badge">
+                            @for (emoji of reactionValues(msg); track $index) {
+                              <span class="reaction-emoji-span">{{ emoji }}</span>
+                            }
+                            @if (reactionCount(msg) > 1) {
+                              <span class="reactions-count-span">{{ reactionCount(msg) }}</span>
+                            }
+                          </div>
+                        }
+                      </div>
+
+                      @if (msg.type !== 'revoked') {
+                        <div class="message-actions-menu">
+                          <button
+                            type="button"
+                            class="action-btn"
+                            (click)="replyingTo.set(msg)"
+                            [title]="'chats.actions.reply' | translate"
+                          >
+                            <lucide-icon name="corner-up-left" [size]="14" />
+                          </button>
+
+                          <div class="reaction-trigger-wrapper">
+                            <button type="button" class="action-btn reaction-btn" [title]="'chats.actions.react' | translate">
+                              <lucide-icon name="smile" [size]="14" />
+                            </button>
+                            <div class="reaction-quick-popover">
+                              @for (emoji of quickReactions; track emoji) {
+                                <button type="button" (click)="reactToMessage(msg, emoji)">{{ emoji }}</button>
+                              }
+                            </div>
+                          </div>
+
+                          @if (msg.direction === 'outgoing' && msg.status !== 'pending') {
+                            <button
+                              type="button"
+                              class="action-btn delete-btn"
+                              (click)="deleteMessage(msg)"
+                              [title]="'chats.actions.delete' | translate"
+                            >
+                              <lucide-icon name="trash-2" [size]="14" />
+                            </button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  </div>
+                }
+              }
+            </div>
+
+            @if (attachment(); as att) {
+              <div class="attachment-preview-banner">
+                @if (previewUrl()) {
+                  <img [src]="previewUrl()" [alt]="att.filename" class="preview-thumbnail" />
+                } @else {
+                  <div class="preview-file-icon">📎</div>
+                }
+                <div class="preview-file-info">
+                  <span class="preview-filename">{{ att.filename }}</span>
+                  <span class="preview-filesize">({{ attachmentSizeKb() }} KB)</span>
+                </div>
+                <button class="btn-remove-attachment" (click)="removeAttachment()">
+                  <lucide-icon name="x" [size]="18" />
+                </button>
+              </div>
+            }
+
+            @if (showEmojiPicker()) {
+              <div class="chats-emoji-picker">
+                <div class="emoji-grid">
+                  @for (emoji of popularEmojis; track emoji) {
+                    <button type="button" class="emoji-btn" (click)="addEmoji(emoji)">{{ emoji }}</button>
+                  }
+                </div>
+              </div>
+            }
+
+            @if (replyingTo()) {
+              <div class="replying-preview-banner">
+                <div class="replying-preview-content">
+                  <div class="replying-to-title">{{ 'chats.replyingTo' | translate: { name: replyingToName() } }}</div>
+                  <div class="replying-to-body">{{ replyingToBody() }}</div>
+                </div>
+                <button class="btn-close-reply" (click)="replyingTo.set(null)">
+                  <lucide-icon name="x" [size]="18" />
+                </button>
+              </div>
+            }
+
+            <footer class="room-input-footer">
+              <form (ngSubmit)="handleSend()" class="input-form">
+                <input type="file" #fileInput (change)="onFileChange($event)" style="display: none" />
+
+                <button
+                  type="button"
+                  (click)="triggerFileSelect()"
+                  [disabled]="!auth.canWrite() || sending()"
+                  class="btn-input-accessory"
+                  [title]="'chats.attachTitle' | translate"
+                >
+                  <lucide-icon name="paperclip" [size]="20" />
+                </button>
+
+                <button
+                  type="button"
+                  (click)="showEmojiPicker.set(!showEmojiPicker())"
+                  [disabled]="!auth.canWrite() || sending()"
+                  class="btn-input-accessory"
+                  [class.active]="showEmojiPicker()"
+                  [title]="'chats.emojiTitle' | translate"
+                >
+                  <lucide-icon name="smile" [size]="20" />
+                </button>
+
+                <input
+                  type="text"
+                  name="messageInput"
+                  [placeholder]="
+                    (auth.canWrite()
+                      ? attachment()
+                        ? 'chats.captionPlaceholder'
+                        : 'chats.messagePlaceholder'
+                      : 'chats.noPermission'
+                    ) | translate
+                  "
+                  [(ngModel)]="messageInput"
+                  (ngModelChange)="inputTick.set(inputTick() + 1)"
+                  [disabled]="!auth.canWrite() || sending()"
+                  class="message-text-input"
+                />
+                <button
+                  type="submit"
+                  [disabled]="sendDisabled()"
+                  class="btn-send-message"
+                  [attr.aria-label]="'chats.send' | translate"
+                >
+                  <lucide-icon [name]="sending() ? 'loader-2' : 'send'" [size]="18" [class.animate-spin]="sending()" />
+                </button>
+              </form>
+            </footer>
+          </div>
+        } @else {
+          <div class="chats-room-placeholder">
+            <lucide-icon name="message-square" [size]="80" class="placeholder-icon" />
+            <h2>{{ 'chats.placeholderTitle' | translate }}</h2>
+            <p>{{ 'chats.placeholderDesc' | translate }}</p>
+          </div>
+        }
+      </main>
+    </div>
+  }
+
+  <app-media-lightbox
+    [items]="imageMedia()"
+    [index]="lightboxIndex()"
+    (close)="lightboxIndex.set(null)"
+    (navigate)="lightboxIndex.set($event)"
+  />
+</div>

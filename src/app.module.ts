@@ -31,7 +31,10 @@ import { StatusModule } from './modules/status/status.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
 import { HooksModule } from './core/hooks';
 import { PluginsModule } from './core/plugins';
-import { PluginsApiModule } from './modules/plugins/plugins.module';
+// Plugins management API disabled. Kept for reference — re-enable by uncommenting this import
+// and its entry in the imports array below. (The core PluginsModule above must stay: the WhatsApp
+// engines are loaded through its PluginLoaderService.)
+// import { PluginsApiModule } from './modules/plugins/plugins.module';
 import { AgentToolsModule } from './core/agent-tools/agent-tools.module';
 
 // Only import QueueModule if explicitly enabled to avoid Redis connection errors
@@ -239,7 +242,7 @@ if (dashboardServingEnabled && dashboardBuildPresent) {
     MetricsModule, // Prometheus /api/metrics
     StatusModule, // Phase 3: Status/Stories API
     CatalogModule, // Phase 3: Catalog API (WhatsApp Business)
-    PluginsApiModule, // Phase 5: Plugins API
+    // PluginsApiModule, // Phase 5: Plugins API — disabled (see commented import above)
     AgentToolsModule, // Agent-invocable tool registry (protocol-neutral)
     ...mcpModules, // MCP Streamable-HTTP server (opt-in via MCP_ENABLED=true)
     ...serveStaticModules, // Bundled dashboard SPA (production single-port setup)

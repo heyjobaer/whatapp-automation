@@ -12,7 +12,7 @@ import {
   LogOut,
   Send,
   Server,
-  Puzzle,
+  // Puzzle, // unused: Plugins nav item disabled below
   Sun,
   Moon,
   Monitor,
@@ -43,7 +43,8 @@ const allNavItems = [
   { to: '/message-tester', icon: Send, key: 'messageTester' as const, adminOnly: false },
   // Backend /infra/* is ADMIN-only; hide the nav item from non-admins (UX + defense-in-depth).
   { to: '/infrastructure', icon: Server, key: 'infrastructure' as const, adminOnly: true },
-  { to: '/plugins', icon: Puzzle, key: 'plugins' as const, adminOnly: true },
+  // Plugins section disabled (kept for reference; core plugin loader still runs the WA engines).
+  // { to: '/plugins', icon: Puzzle, key: 'plugins' as const, adminOnly: true },
   { to: '/logs', icon: FileText, key: 'logs' as const, adminOnly: false },
 ];
 

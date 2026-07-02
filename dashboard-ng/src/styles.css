@@ -1,0 +1,553 @@
+/* All @import rules must precede other rules — fonts first, then Tailwind + PrimeNG. */
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,200..800;1,200..800&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;500;600;700&display=swap');
+@import 'tailwindcss';
+@import 'primeicons/primeicons.css';
+@plugin 'tailwindcss-primeui';
+
+/* ── Design tokens (ported from the React dashboard: App.css + index.css) ── */
+
+:root {
+  --primary: #25d366;
+  --primary-hover: #1da851;
+  --primary-soft: rgba(37, 211, 102, 0.12);
+  --bg-light: #f8fafc;
+  --bg-white: #ffffff;
+  --bg-card: #ffffff;
+  --text-primary: #0f172a; /* Slate 900 */
+  --text-secondary: #475569; /* Slate 600 */
+  --text-muted: #94a3b8; /* Slate 400 */
+  --border: #e2e8f0; /* Slate 200 */
+  --error: #ef4444;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --radius: 10px;
+
+  font-family: 'Plus Jakarta Sans', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.6;
+  font-weight: 400;
+  color-scheme: light dark;
+  color: var(--text-primary);
+  background-color: var(--bg-light);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html[lang='he'],
+html[dir='rtl'] {
+  font-family: 'Heebo', 'Rubik', 'Noto Sans Hebrew', 'Segoe UI', Arial, sans-serif;
+}
+
+html[lang='ar'] {
+  font-family: 'Noto Sans Arabic', 'Cairo', 'Tajawal', 'Segoe UI', Arial, sans-serif;
+}
+
+[data-palette='blue'] {
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-soft: rgba(37, 99, 235, 0.12);
+}
+
+[data-palette='graphite'] {
+  --primary: #64748b;
+  --primary-hover: #475569;
+  --primary-soft: rgba(100, 116, 139, 0.14);
+}
+
+[data-palette='indigo'] {
+  --primary: #4f46e5;
+  --primary-hover: #4338ca;
+  --primary-soft: rgba(79, 70, 229, 0.12);
+}
+
+[data-palette='amber'] {
+  --primary: #d97706;
+  --primary-hover: #b45309;
+  --primary-soft: rgba(217, 119, 6, 0.13);
+}
+
+[data-palette='rose'] {
+  --primary: #e11d48;
+  --primary-hover: #be123c;
+  --primary-soft: rgba(225, 29, 72, 0.12);
+}
+
+[data-palette='teal'] {
+  --primary: #0d9488;
+  --primary-hover: #0f766e;
+  --primary-soft: rgba(13, 148, 136, 0.12);
+}
+
+/* Dark mode. The ThemeService always resolves 'system' to an explicit light/dark attribute
+   (and tracks OS changes live), so a data-theme attribute is always present after boot —
+   native controls (select popups, scrollbars, date pickers) follow the app theme (#249). */
+[data-theme='dark'] {
+  color-scheme: dark;
+  --bg-light: #0f172a; /* Slate 900 */
+  --bg-white: #1e293b; /* Slate 800 */
+  --bg-card: #1e293b;
+  --text-primary: #f1f5f9; /* Slate 100 */
+  --text-secondary: #cbd5e1; /* Slate 300 */
+  --text-muted: #64748b; /* Slate 500 */
+  --border: #334155; /* Slate 700 */
+  --primary-soft: color-mix(in srgb, var(--primary) 18%, transparent);
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+}
+
+[data-theme='light'] {
+  color-scheme: light;
+}
+
+/* Pre-boot fallback (before ThemeService sets the attribute): follow the OS. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+    --bg-light: #0f172a;
+    --bg-white: #1e293b;
+    --bg-card: #1e293b;
+    --text-primary: #f1f5f9;
+    --text-secondary: #cbd5e1;
+    --text-muted: #64748b;
+    --border: #334155;
+    --primary-soft: color-mix(in srgb, var(--primary) 18%, transparent);
+    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+    --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+    --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.4), 0 4px 6px -4px rgb(0 0 0 / 0.4);
+  }
+}
+
+/* ── Base element styles (ported) ── */
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  font-family:
+    'Plus Jakarta Sans',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    Helvetica,
+    Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--bg-light);
+  color: var(--text-primary);
+  line-height: 1.6;
+}
+
+h1 {
+  font-size: 1.875rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  letter-spacing: -0.025em;
+}
+
+h2 {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+button:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--primary, #25d366);
+  outline-offset: 2px;
+}
+
+button:focus:not(:focus-visible) {
+  outline: none;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+  background: var(--bg-white);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* Global select/dropdown styling */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  width: 100%;
+  padding: 0.75rem 2.5rem 0.75rem 1rem;
+  font-size: 0.9375rem;
+  font-family: inherit;
+  color: var(--text-primary);
+  background-color: var(--bg-white, #fff);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+select:hover {
+  border-color: var(--primary, #25d366);
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--primary, #25d366);
+  box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.1);
+}
+
+select:disabled {
+  background-color: var(--bg-light, #f8fafc);
+  color: var(--text-muted, #94a3b8);
+  cursor: not-allowed;
+}
+
+/* ── Global modal styles (ported; page modals keep the same markup/classes) ── */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.modal {
+  background: var(--bg-white, #fff);
+  border-radius: 16px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  width: 90%;
+  max-width: 480px;
+  animation: slideUp 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  max-height: 90vh;
+  overflow: hidden;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1.5rem 1.5rem 1rem;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  flex-shrink: 0;
+}
+
+.modal-header h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary, #1e293b);
+  margin: 0;
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+.modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}
+
+.modal-body > label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary, #64748b);
+  margin-bottom: 0.5rem;
+}
+
+.modal-body input {
+  width: 100%;
+  padding: 0.875rem 1rem;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  background: var(--bg-light, #f8fafc);
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.modal-body input:focus {
+  outline: none;
+  border-color: var(--primary, #25d366);
+  background: var(--bg-white, #fff);
+  box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.1);
+}
+
+.modal-body input[type='radio']:not(.toggle-switch input),
+.modal-body input[type='checkbox']:not(.toggle-switch input) {
+  width: auto;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  flex: none;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem 1.5rem;
+  flex-shrink: 0;
+}
+
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--bg-light, #f8fafc);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text-secondary, #64748b);
+  transition: all 0.2s;
+  flex-shrink: 0;
+  padding: 0;
+}
+
+.btn-icon svg {
+  width: 20px;
+  height: 20px;
+  stroke: var(--text-secondary, #64748b);
+}
+
+.btn-icon:hover {
+  background: #fee2e2;
+  border-color: #fecaca;
+  color: #dc2626;
+}
+
+.btn-icon:hover svg {
+  stroke: #dc2626;
+}
+
+.btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--bg-light, #f8fafc);
+  color: var(--text-secondary, #64748b);
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  background: var(--bg-white, #fff);
+  border-color: var(--text-muted, #94a3b8);
+  color: var(--text-primary, #1e293b);
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
+code {
+  background: var(--bg-light, #f1f5f9);
+  padding: 0.125rem 0.375rem;
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875em;
+  color: var(--text-primary, #1e293b);
+}
+
+/* ── RTL / Hebrew direction support (ported) ── */
+
+[dir='rtl'] code,
+[dir='rtl'] .mono,
+[dir='rtl'] pre {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: embed;
+}
+
+[dir='rtl'] .modal-footer {
+  justify-content: flex-end;
+  flex-direction: row-reverse;
+}
+
+[dir='rtl'] select {
+  padding: 0.75rem 1rem 0.75rem 2.5rem;
+  background-position: left 0.75rem center;
+}
+
+[dir='rtl'] .modal-body input,
+[dir='rtl'] .modal-body textarea,
+[dir='rtl'] input[type='text'],
+[dir='rtl'] input[type='url'],
+[dir='rtl'] input[type='password'],
+[dir='rtl'] input[type='number'],
+[dir='rtl'] textarea {
+  text-align: right;
+}
+
+[dir='rtl'] input[type='url'],
+[dir='rtl'] input[type='email'],
+[dir='rtl'] input[type='tel'] {
+  direction: ltr;
+  text-align: left;
+}
+
+[dir='rtl'] .page-header__top {
+  flex-direction: row-reverse;
+}
+
+/* ── Shared error banner (ported) ── */
+
+.error-banner {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 8px;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.error-banner svg,
+.error-banner lucide-icon {
+  color: #ef4444;
+}
+
+.error-banner-text {
+  color: #ef4444;
+}
+
+/* ── Mobile responsive (ported) ── */
+
+@media (max-width: 768px) {
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  .modal {
+    width: 95%;
+    max-width: none;
+    margin: 1rem;
+    border-radius: 12px;
+  }
+
+  .modal-header {
+    padding: 1.25rem 1.25rem 0.875rem;
+  }
+
+  .modal-header h2 {
+    font-size: 1.125rem;
+  }
+
+  .modal-body {
+    padding: 1.25rem;
+  }
+
+  .modal-footer {
+    padding: 0.875rem 1.25rem 1.25rem;
+  }
+
+  select {
+    padding: 0.625rem 2.25rem 0.625rem 0.875rem;
+    font-size: 0.875rem;
+  }
+}
+
+@media (max-width: 480px) {
+  h1 {
+    font-size: 1.25rem;
+  }
+
+  .modal-overlay {
+    align-items: flex-end;
+  }
+
+  .modal {
+    width: 100%;
+    margin: 0;
+    border-radius: 16px 16px 0 0;
+  }
+}
