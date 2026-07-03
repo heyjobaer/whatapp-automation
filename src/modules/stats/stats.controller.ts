@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { StatsService } from './stats.service';
 import { StatsQueryDto } from './dto/stats-query.dto';
 import { RequireRole } from '../auth/decorators/auth.decorators';
-import { ApiKeyRole } from '../auth/entities/api-key.entity';
+import { UserRole } from '../auth/entities/role.entity';
 
 @ApiTags('Statistics')
 @Controller('stats')
@@ -13,14 +13,14 @@ export class StatsController {
   // Global, cross-session aggregates with no scope param — ADMIN-only so a VIEWER / session-
   // restricted key can't read cross-tenant activity. (Per-session stats below stays scope-gated.)
   @Get('overview')
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get overall statistics' })
   async getOverview() {
     return this.statsService.getOverview();
   }
 
   @Get('messages')
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get message statistics with time series' })
   async getMessageStats(@Query() query: StatsQueryDto) {
     return this.statsService.getMessageStats(query.period || '24h');

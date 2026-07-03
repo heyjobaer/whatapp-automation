@@ -54,7 +54,9 @@
     "refresh": "רענון",
     "errorGeneric": "אירעה שגיאה",
     "unknownError": "שגיאה לא ידועה",
-    "retry": "נסה שוב"
+    "retry": "נסה שוב",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "theme": {
     "light": "בהיר",
@@ -75,7 +77,8 @@
     "messageTester": "בדיקת הודעות",
     "infrastructure": "תשתית",
     "plugins": "תוספים",
-    "logs": "לוגים"
+    "logs": "לוגים",
+    "users": "Users"
   },
   "chats": {
     "media": {
@@ -145,7 +148,15 @@
     "help": "צריך עזרה?",
     "viewDocs": "לצפייה בתיעוד",
     "footer": "נבנה באהבה על ידי Yudhi Armyndharis וקהילת OpenWA",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in...",
+    "credentialsRequired": "Email and password are required",
+    "invalidCredentials": "Invalid email or password"
   },
   "dashboard": {
     "title": "דאשבורד",

@@ -1,4 +1,4 @@
-import { In, Repository } from 'typeorm';
+import { In, Repository } from '../../database/knex';
 import { MessageTypeBackfillService } from './message-type-backfill.service';
 import { Message } from './entities/message.entity';
 

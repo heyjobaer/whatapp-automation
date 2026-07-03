@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApiKeyRole } from '../../../modules/auth/entities/api-key.entity';
+import { UserRole } from '../../../modules/auth/entities/role.entity';
 import type { ContactService } from '../../../modules/contact/contact.service';
 import type { ToolDescriptor } from '../tool-descriptor';
 
@@ -80,7 +80,7 @@ export function contactTools(contact: ContactService): ToolDescriptor[] {
       name: 'ContactBlock',
       description: 'Block a contact. The contact will no longer be able to send messages. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -95,7 +95,7 @@ export function contactTools(contact: ContactService): ToolDescriptor[] {
       name: 'ContactUnblock',
       description: 'Unblock a previously blocked contact. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,

@@ -70,32 +70,31 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
     this.logger.log('WebSocket Gateway initialized');
   }
 
-  async handleConnection(client: Socket) {
-    // Prefer Socket.IO's `auth` field (not logged in URLs), then the header; the query
-    // param is a deprecated transition fallback (the key leaks into access logs).
-    const handshakeAuth = client.handshake.auth as { apiKey?: string } | undefined;
-    const apiKey =
-      handshakeAuth?.apiKey ||
-      (client.handshake.headers['x-api-key'] as string) ||
-      (client.handshake.query.apiKey as string);
+  handleConnection(client: Socket) {
+    // Prefer Socket.IO's `auth` field (not logged in URLs), then the Authorization header; the query
+    // param is a deprecated transition fallback (the token leaks into access logs).
+    const handshakeAuth = client.handshake.auth as { token?: string } | undefined;
+    const authHeader = client.handshake.headers['authorization'];
+    const token =
+      handshakeAuth?.token ||
+      (typeof authHeader === 'string' && authHeader.startsWith('Bearer ') ? authHeader.slice(7) : undefined) ||
+      (client.handshake.query.token as string);
 
-    if (!apiKey) {
-      this.logger.warn(`Client ${client.id} rejected: No API key provided`);
-      client.emit('message', this.createError('UNAUTHORIZED', 'API key required'));
+    if (!token) {
+      this.logger.warn(`Client ${client.id} rejected: No token provided`);
+      client.emit('message', this.createError('UNAUTHORIZED', 'Authentication token required'));
       client.disconnect();
       return;
     }
 
     try {
-      // validateApiKey THROWS on any failure (it never resolves to a falsy value), so the rejection
-      // path is the catch below — a separate `if (!validKey)` branch here was dead code.
-      const validKey = await this.authService.validateApiKey(apiKey);
-
-      // Store the validated key AND the raw key — the raw key lets handleSubscribe
-      // RE-validate on each subscription so a key revoked mid-connection is caught.
-      (client.data as { apiKey: unknown; rawApiKey: string }).apiKey = validKey;
-      (client.data as { rawApiKey: string }).rawApiKey = apiKey;
-      this.logger.log(`Client connected: ${client.id} (key: ${validKey.name})`);
+      // verifyToken THROWS on any failure, so the rejection path is the catch below.
+      const user = this.authService.verifyToken(token);
+      // Store the user AND the raw token — the raw token lets handleSubscribe RE-verify on each
+      // subscription so an expired token is caught mid-connection.
+      (client.data as { user: unknown; rawToken: string }).user = user;
+      (client.data as { rawToken: string }).rawToken = token;
+      this.logger.log(`Client connected: ${client.id} (user: ${user.email})`);
     } catch (error) {
       this.logger.warn(`Client ${client.id} rejected: Auth error`, {
         error: error instanceof Error ? error.message : String(error),
@@ -138,25 +137,16 @@ export class EventsGateway implements OnGatewayInit, OnGatewayConnection, OnGate
       return this.createError('INVALID_SESSION', 'sessionId is required', requestId);
     }
 
-    // Re-validate the API key on every subscribe: a long-lived socket whose key was
-    // revoked/expired after connect must not be able to keep opening new subscriptions.
-    const rawApiKey = (client.data as { rawApiKey?: string }).rawApiKey;
-    let subscriberKey: { allowedSessions?: string[] | null } | null;
+    // Re-verify the token on every subscribe: a long-lived socket whose token expired after connect
+    // must not be able to keep opening new subscriptions.
+    const rawToken = (client.data as { rawToken?: string }).rawToken;
     try {
-      subscriberKey = rawApiKey ? await this.authService.validateApiKey(rawApiKey) : null;
+      if (!rawToken) throw new Error('missing token');
+      this.authService.verifyToken(rawToken);
     } catch {
-      subscriberKey = null;
-    }
-    if (!subscriberKey) {
-      client.emit('message', this.createError('UNAUTHORIZED', 'API key is no longer valid', requestId));
+      client.emit('message', this.createError('UNAUTHORIZED', 'Token is no longer valid', requestId));
       client.disconnect();
-      return this.createError('UNAUTHORIZED', 'API key is no longer valid', requestId);
-    }
-
-    // Enforce per-key session scope against the FRESH key: a key restricted to specific
-    // sessions must not subscribe to '*' or a session outside its allowlist (#221).
-    if (!isSessionSubscriptionAllowed(subscriberKey.allowedSessions, sessionId)) {
-      return this.createError('FORBIDDEN_SESSION', 'API key is not authorized for this session', requestId);
+      return this.createError('UNAUTHORIZED', 'Token is no longer valid', requestId);
     }
 
     // Validate events

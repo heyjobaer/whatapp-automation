@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApiKeyRole } from '../../../modules/auth/entities/api-key.entity';
+import { UserRole } from '../../../modules/auth/entities/role.entity';
 import type { MessageService } from '../../../modules/message/message.service';
 import type { ToolDescriptor } from '../tool-descriptor';
 
@@ -67,7 +67,7 @@ export function messageTools(message: MessageService): ToolDescriptor[] {
       name: 'MessageSendText',
       description: 'Send a plain text message to a chat or group. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -81,7 +81,7 @@ export function messageTools(message: MessageService): ToolDescriptor[] {
       name: 'MessageSendImage',
       description: 'Send an image message via URL or base64. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -114,7 +114,7 @@ export function messageTools(message: MessageService): ToolDescriptor[] {
       name: 'MessageSendVideo',
       description: 'Send a video message via URL or base64. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -147,7 +147,7 @@ export function messageTools(message: MessageService): ToolDescriptor[] {
       name: 'MessageSendAudio',
       description: 'Send an audio/voice message via URL or base64. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -183,7 +183,7 @@ export function messageTools(message: MessageService): ToolDescriptor[] {
       name: 'MessageSendDocument',
       description: 'Send a document/file message via URL or base64. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -216,7 +216,7 @@ export function messageTools(message: MessageService): ToolDescriptor[] {
       name: 'MessageSendLocation',
       description: 'Send a location pin message. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -246,7 +246,7 @@ export function messageTools(message: MessageService): ToolDescriptor[] {
       name: 'MessageSendContact',
       description: 'Send a contact card message. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -265,7 +265,7 @@ export function messageTools(message: MessageService): ToolDescriptor[] {
       name: 'MessageSendSticker',
       description: 'Send a sticker message via URL or base64. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -299,7 +299,7 @@ export function messageTools(message: MessageService): ToolDescriptor[] {
       description:
         'Render a stored text template and send it as a text message. Provide either templateId or templateName. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -329,7 +329,7 @@ export function messageTools(message: MessageService): ToolDescriptor[] {
       name: 'MessageReply',
       description: 'Reply to a specific message (quoted reply). Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -348,7 +348,7 @@ export function messageTools(message: MessageService): ToolDescriptor[] {
       name: 'MessageForward',
       description: 'Forward a message from one chat to another. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -368,7 +368,7 @@ export function messageTools(message: MessageService): ToolDescriptor[] {
       description:
         'Add or remove a reaction emoji on a message. Send empty string emoji to remove. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,

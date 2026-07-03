@@ -54,7 +54,9 @@
     "refresh": "تحديث",
     "errorGeneric": "حدث خطأ",
     "unknownError": "خطأ غير معروف",
-    "retry": "إعادة المحاولة"
+    "retry": "إعادة المحاولة",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "theme": {
     "light": "فاتح",
@@ -75,7 +77,8 @@
     "messageTester": "اختبار الرسائل",
     "infrastructure": "البنية التحتية",
     "plugins": "الإضافات",
-    "logs": "السجلات"
+    "logs": "السجلات",
+    "users": "Users"
   },
   "chats": {
     "media": {
@@ -145,7 +148,15 @@
     "help": "هل تحتاج مساعدة؟",
     "viewDocs": "عرض التوثيق",
     "footer": "صُنع بـ ❤️ بواسطة Yudhi Armyndharis ومجتمع OpenWA",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in...",
+    "credentialsRequired": "Email and password are required",
+    "invalidCredentials": "Invalid email or password"
   },
   "dashboard": {
     "title": "لوحة التحكم",

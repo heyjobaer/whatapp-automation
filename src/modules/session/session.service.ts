@@ -9,12 +9,12 @@ import {
   Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository, InjectDataSource } from '@nestjs/typeorm';
-import { Repository, In, Not, IsNull, DataSource, FindManyOptions } from 'typeorm';
-import { QueryDeepPartialEntity } from 'typeorm/query-builder/QueryPartialEntity';
+import { Inject } from '@nestjs/common';
+import { Knex } from 'knex';
+import { KNEX_CONNECTION } from '../../database/database.module';
+import { jsonb } from '../../database/pg.util';
 import { Session, SessionStatus } from './entities/session.entity';
 import { Message, MessageDirection, MessageStatus } from '../message/entities/message.entity';
-import { MessageBatch } from '../message/entities/message-batch.entity';
 import { CreateSessionDto } from './dto';
 import { EngineFactory } from '../../engine/engine.factory';
 import { paginate, ListOptions, resolveListWindow } from '../../common/utils/paginate';
@@ -132,12 +132,8 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
   private reactionChains: Map<string, Promise<void>> = new Map();
 
   constructor(
-    @InjectRepository(Session, 'data')
-    private readonly sessionRepository: Repository<Session>,
-    @InjectRepository(Message, 'data')
-    private readonly messageRepository: Repository<Message>,
-    @InjectDataSource('data')
-    private readonly dataSource: DataSource,
+    @Inject(KNEX_CONNECTION)
+    private readonly knex: Knex,
     private readonly engineFactory: EngineFactory,
     private readonly eventsGateway: EventsGateway,
     private readonly webhookService: WebhookService,
@@ -158,15 +154,14 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       SessionStatus.AUTHENTICATING,
     ];
 
-    const result = await this.sessionRepository.update(
-      { status: In(activeStatuses) },
-      { status: SessionStatus.DISCONNECTED },
-    );
+    const affected = await this.knex('sessions')
+      .whereIn('status', activeStatuses)
+      .update({ status: SessionStatus.DISCONNECTED, updatedAt: this.knex.fn.now() });
 
-    if (result.affected && result.affected > 0) {
-      this.logger.log(`Reset ${result.affected} session(s) to disconnected on startup`, {
+    if (affected && affected > 0) {
+      this.logger.log(`Reset ${affected} session(s) to disconnected on startup`, {
         action: 'startup_reset',
-        affected: result.affected,
+        affected,
       });
     }
   }
@@ -174,9 +169,9 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
   async onApplicationBootstrap(): Promise<void> {
     if (process.env.AUTO_START_SESSIONS !== 'true') return;
 
-    const sessions = await this.sessionRepository.find({
-      where: { phone: Not(IsNull()), status: SessionStatus.DISCONNECTED },
-    });
+    const sessions = (await this.knex('sessions')
+      .whereNotNull('phone')
+      .where({ status: SessionStatus.DISCONNECTED })) as Session[];
 
     if (sessions.length === 0) return;
 
@@ -262,25 +257,21 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
 
   async create(dto: CreateSessionDto): Promise<Session> {
     // Check if session with same name exists
-    const existing = await this.sessionRepository.findOne({
-      where: { name: dto.name },
-    });
+    const existing = await this.knex('sessions').where({ name: dto.name }).first();
 
     if (existing) {
       throw new ConflictException(`Session with name '${dto.name}' already exists`);
     }
 
-    const session = this.sessionRepository.create({
-      name: dto.name,
-      config: dto.config || {},
-      proxyUrl: dto.proxyUrl || null,
-      proxyType: dto.proxyType || null,
-      status: SessionStatus.CREATED,
-    });
-
-    const saved = await this.dataSource.transaction(async manager => {
-      return await manager.save(session);
-    });
+    const [saved] = (await this.knex('sessions')
+      .insert({
+        name: dto.name,
+        config: jsonb(dto.config || {}),
+        proxyUrl: dto.proxyUrl || null,
+        proxyType: dto.proxyType || null,
+        status: SessionStatus.CREATED,
+      })
+      .returning('*')) as Session[];
     this.logger.log(`Session created: ${saved.name}`, {
       sessionId: saved.id,
       action: 'create',
@@ -300,16 +291,16 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     // allowlist) lists all — mirroring the ApiKeyGuard allowedSessions model so a scoped key
     // cannot enumerate every session through this aggregate route.
     const { limit, offset } = resolveListWindow(opts.limit, opts.offset);
-    const options: FindManyOptions<Session> = { order: { createdAt: 'DESC' }, take: limit, skip: offset };
+    const query = this.knex('sessions').orderBy('createdAt', 'desc').limit(limit).offset(offset);
     if (allowedSessions && allowedSessions.length > 0) {
-      options.where = { id: In(allowedSessions) };
+      query.whereIn('id', allowedSessions);
     }
-    const sessions = await this.sessionRepository.find(options);
+    const sessions = (await query) as Session[];
     return sessions.map(session => this.attachLastError(session));
   }
 
   async findOne(id: string): Promise<Session> {
-    const session = await this.sessionRepository.findOne({ where: { id } });
+    const session = (await this.knex('sessions').where({ id }).first()) as Session | undefined;
     if (!session) {
       throw new NotFoundException(`Session with id '${id}' not found`);
     }
@@ -327,7 +318,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
   }
 
   async findByName(name: string): Promise<Session> {
-    const session = await this.sessionRepository.findOne({ where: { name } });
+    const session = (await this.knex('sessions').where({ name }).first()) as Session | undefined;
     if (!session) {
       throw new NotFoundException(`Session with name '${name}' not found`);
     }
@@ -370,10 +361,10 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       // messages and message_batches carry a sessionId but have no FK cascade to sessions (unlike
       // webhooks/templates/baileys_stored_messages), so remove them explicitly in the same transaction
       // — otherwise deleting a session leaves its full history orphaned forever.
-      await this.dataSource.transaction(async manager => {
-        await manager.delete(Message, { sessionId: id });
-        await manager.delete(MessageBatch, { sessionId: id });
-        await manager.remove(session);
+      await this.knex.transaction(async trx => {
+        await trx('messages').where({ sessionId: id }).del();
+        await trx('message_batches').where({ session_id: id }).del();
+        await trx('sessions').where({ id: session.id }).del();
       });
       this.logger.log(`Session deleted: ${session.name}`, {
         sessionId: id,
@@ -487,10 +478,10 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     let inserted = 0;
     for (let i = 0; i < ids.length; i += CHUNK) {
       const chunkIds = ids.slice(i, i + CHUNK);
-      const existing = await this.messageRepository.find({
-        where: { sessionId: id, waMessageId: In(chunkIds) },
-        select: ['waMessageId'],
-      });
+      const existing = (await this.knex('messages')
+        .where({ sessionId: id })
+        .whereIn('waMessageId', chunkIds)
+        .select('waMessageId')) as Array<{ waMessageId: string }>;
       const seen = new Set(existing.map(r => r.waMessageId));
       const rows = chunkIds
         .filter(x => !seen.has(x))
@@ -500,7 +491,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
           if (m.media) metadata.media = m.media;
           if (m.quotedMessage) metadata.quotedMessage = m.quotedMessage;
           if (m.call) metadata.call = m.call;
-          const row = this.messageRepository.create({
+          const row: Record<string, unknown> = {
             sessionId: id,
             waMessageId: m.id,
             chatId: m.chatId,
@@ -511,8 +502,8 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
             direction: m.fromMe ? MessageDirection.OUTGOING : MessageDirection.INCOMING,
             timestamp: m.timestamp,
             status: MessageStatus.SENT,
-            metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-          });
+            metadata: Object.keys(metadata).length > 0 ? jsonb(metadata) : null,
+          };
           // The chat panel orders by createdAt; stamp the real time so history sorts correctly.
           if (m.timestamp) {
             row.createdAt = new Date(m.timestamp * 1000);
@@ -521,14 +512,9 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
         });
       if (rows.length) {
         // Insert-or-ignore: a live onMessage insert can land between the `seen` SELECT above and this
-        // write, colliding on UNIQUE(sessionId, waMessageId). orIgnore skips the collision instead of
-        // throwing and aborting the whole batch (history is best-effort, persist-never-dispatch).
-        await this.messageRepository
-          .createQueryBuilder()
-          .insert()
-          .values(rows as unknown as QueryDeepPartialEntity<Message>[])
-          .orIgnore()
-          .execute();
+        // write, colliding on UNIQUE(sessionId, waMessageId). onConflict().ignore() skips the collision
+        // instead of throwing and aborting the whole batch (history is best-effort, persist-never-dispatch).
+        await this.knex('messages').insert(rows).onConflict(['sessionId', 'waMessageId']).ignore();
         inserted += rows.length;
       }
     }
@@ -617,12 +603,13 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
         }
         this.sessionErrors.delete(id);
 
-        void this.sessionRepository.update(id, {
+        void this.knex('sessions').where({ id }).update({
           status: SessionStatus.READY,
           phone,
           pushName,
           connectedAt: new Date(),
           lastActiveAt: new Date(),
+          updatedAt: this.knex.fn.now(),
         });
       },
       onMessage: (message): void => {
@@ -654,7 +641,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
           action: 'message_received',
         });
         // Update last active timestamp
-        void this.sessionRepository.update(id, { lastActiveAt: new Date() });
+        void this.knex('sessions').where({ id }).update({ lastActiveAt: new Date(), updatedAt: this.knex.fn.now() });
         // Convert IncomingMessage to plain object for dispatch
         const messageData = { ...message };
 
@@ -691,7 +678,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
               metadata.call = incoming.call;
             }
 
-            const dbMessage = this.messageRepository.create({
+            const dbMessage = {
               sessionId: id,
               waMessageId: incoming.id,
               chatId: incoming.chatId,
@@ -702,8 +689,8 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
               direction: incoming.fromMe ? MessageDirection.OUTGOING : MessageDirection.INCOMING,
               timestamp: incoming.timestamp,
               status: MessageStatus.SENT,
-              metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
-            });
+              metadata: Object.keys(metadata).length > 0 ? jsonb(metadata) : null,
+            };
 
             // The hook chain above is async; a delete()/teardown can retire this engine while it
             // awaits. Re-check liveness so a late continuation can't persist an orphan messages row
@@ -718,7 +705,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
             // message is never dropped by a transient DB failure.
             let isNewMessage = true;
             try {
-              await this.messageRepository.insert(dbMessage as unknown as QueryDeepPartialEntity<Message>);
+              await this.knex('messages').insert(dbMessage);
             } catch (err) {
               if (isUniqueConstraintError(err)) {
                 isNewMessage = false;
@@ -766,7 +753,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
           action: 'message_sent',
         });
         // Update last active timestamp
-        void this.sessionRepository.update(id, { lastActiveAt: new Date() });
+        void this.knex('sessions').where({ id }).update({ lastActiveAt: new Date(), updatedAt: this.knex.fn.now() });
         const messageData = { ...message };
 
         // Execute hook for message sent - plugins can modify or stop processing
@@ -813,12 +800,11 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
           // session must never advance a same-id row in another session. The In() guard makes the
           // UPDATE forward-only (a late/out-of-order ack can't downgrade) and idempotent on retry.
           const advanceAck = (): Promise<number> =>
-            this.messageRepository
-              .update(
-                { sessionId: id, waMessageId: messageId, status: In(ackStatusTransitionFrom(messageStatus)) },
-                { status: messageStatus },
-              )
-              .then(result => result.affected ?? 0);
+            this.knex('messages')
+              .where({ sessionId: id, waMessageId: messageId })
+              .whereIn('status', ackStatusTransitionFrom(messageStatus))
+              .update({ status: messageStatus })
+              .then((affected: number) => affected ?? 0);
 
           const logNoop = (): void =>
             this.logger.debug(`Message ack ${messageId}: no status row advanced to ${messageStatus} (${status})`, {
@@ -891,8 +877,9 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
         // Flag the stored message as revoked (best-effort; the message may not be in the
         // DB). The dashboard renders the localized "message deleted" text, so no display
         // string is persisted here.
-        void this.messageRepository
-          .update({ sessionId: id, waMessageId: message.id }, { body: '', type: 'revoked' })
+        void this.knex('messages')
+          .where({ sessionId: id, waMessageId: message.id })
+          .update({ body: '', type: 'revoked' })
           .catch(err => {
             this.logger.error(`Failed to update revoked message: ${message.id}`, String(err));
           });
@@ -1004,7 +991,9 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
    */
   private async applyReaction(id: string, event: ReactionEvent): Promise<void> {
     try {
-      const msg = await this.messageRepository.findOne({ where: { sessionId: id, waMessageId: event.messageId } });
+      const msg = (await this.knex('messages')
+        .where({ sessionId: id, waMessageId: event.messageId })
+        .first()) as Message | undefined;
       if (!msg) return;
 
       const metadata = msg.metadata || {};
@@ -1016,7 +1005,9 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       }
       metadata.reactions = reactions;
       msg.metadata = metadata;
-      await this.messageRepository.save(msg);
+      await this.knex('messages')
+        .where({ id: msg.id })
+        .update({ metadata: jsonb(metadata) });
 
       this.eventsGateway.emitMessageReaction(id, { ...event, reactions });
       // Webhook parity with the WebSocket broadcast: same payload (event + post-apply snapshot), so a
@@ -1081,7 +1072,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     if (this.stoppingSessions.has(id)) {
       return true;
     }
-    return (await this.sessionRepository.findOne({ where: { id } })) == null;
+    return (await this.knex('sessions').where({ id }).first()) == null;
   }
 
   private async executeReconnect(id: string, session: Session, state: ReconnectState): Promise<void> {
@@ -1340,7 +1331,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
   }
 
   private async updateStatus(id: string, status: SessionStatus): Promise<void> {
-    await this.sessionRepository.update(id, { status });
+    await this.knex('sessions').where({ id }).update({ status, updatedAt: this.knex.fn.now() });
     this.logger.debug(`Session status updated to ${status}`, {
       sessionId: id,
       status,
@@ -1374,14 +1365,13 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     // DEFAULT_LIST_LIMIT for the HTTP routes, so reusing it here would silently undercount `total` and
     // `byStatus` on deployments with more sessions than that cap. A grouped COUNT is correct at any
     // scale and cheaper (no entity hydration).
-    const qb = this.sessionRepository
-      .createQueryBuilder('session')
-      .select('session.status', 'status')
-      .addSelect('COUNT(session.id)', 'count');
+    const qb = this.knex('sessions as session')
+      .select('session.status as status')
+      .count('session.id as count');
     if (scope) {
-      qb.where('session.id IN (:...scope)', { scope });
+      qb.whereIn('session.id', scope);
     }
-    const rows = await qb.groupBy('session.status').getRawMany<{ status: string; count: string }>();
+    const rows = (await qb.groupBy('session.status')) as Array<{ status: string; count: string }>;
 
     const byStatus: Record<string, number> = {};
     let total = 0;

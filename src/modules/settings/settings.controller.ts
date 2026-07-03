@@ -2,7 +2,7 @@ import { Controller, Get, Put, NotImplementedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { ConfigService } from '@nestjs/config';
 import { RequireRole } from '../auth/decorators/auth.decorators';
-import { ApiKeyRole } from '../auth/entities/api-key.entity';
+import { UserRole } from '../auth/entities/role.entity';
 
 interface Settings {
   general: {
@@ -53,7 +53,7 @@ export class SettingsController {
   }
 
   @Get()
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get application settings' })
   @ApiResponse({ status: 200, description: 'Current settings' })
   get(): Settings {
@@ -64,7 +64,7 @@ export class SettingsController {
   }
 
   @Put()
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Settings are read-only at runtime (environment-derived)' })
   @ApiResponse({
     status: 501,

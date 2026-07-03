@@ -22,23 +22,39 @@
 
     <form (ngSubmit)="handleSubmit()" class="login-form">
       <div class="input-group">
-        <label for="apiKey">{{ 'login.apiKey' | translate }}</label>
+        <label for="email">{{ 'login.email' | translate }}</label>
         <div class="input-wrapper">
           <input
-            id="apiKey"
-            name="apiKey"
-            [type]="showKey() ? 'text' : 'password'"
-            [(ngModel)]="apiKey"
-            [placeholder]="'login.apiKeyPlaceholder' | translate"
+            id="email"
+            name="email"
+            type="email"
+            autocomplete="username"
+            [(ngModel)]="email"
+            [placeholder]="'login.emailPlaceholder' | translate"
+            [class.error]="error()"
+          />
+        </div>
+      </div>
+
+      <div class="input-group">
+        <label for="password">{{ 'login.password' | translate }}</label>
+        <div class="input-wrapper">
+          <input
+            id="password"
+            name="password"
+            [type]="showPassword() ? 'text' : 'password'"
+            autocomplete="current-password"
+            [(ngModel)]="password"
+            [placeholder]="'login.passwordPlaceholder' | translate"
             [class.error]="error()"
           />
           <button
             type="button"
             class="toggle-visibility"
-            (click)="showKey.set(!showKey())"
-            [attr.aria-label]="(showKey() ? 'common.hideApiKey' : 'common.showApiKey') | translate"
+            (click)="showPassword.set(!showPassword())"
+            [attr.aria-label]="(showPassword() ? 'common.hidePassword' : 'common.showPassword') | translate"
           >
-            <lucide-icon [name]="showKey() ? 'eye-off' : 'eye'" [size]="20" />
+            <lucide-icon [name]="showPassword() ? 'eye-off' : 'eye'" [size]="20" />
           </button>
         </div>
         @if (error()) {
@@ -47,7 +63,7 @@
       </div>
 
       <button type="submit" class="connect-btn" [disabled]="isLoading()">
-        {{ (isLoading() ? 'login.connecting' : 'login.connect') | translate }}
+        {{ (isLoading() ? 'login.signingIn' : 'login.signIn') | translate }}
       </button>
     </form>
 

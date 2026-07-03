@@ -1,281 +1,228 @@
-import { Injectable, NotFoundException, UnauthorizedException, OnModuleInit } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { randomBytes } from 'crypto';
-import { existsSync, readFileSync } from 'fs';
+import {
+  Injectable,
+  Inject,
+  OnModuleInit,
+  UnauthorizedException,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { Knex } from 'knex';
+import * as bcrypt from 'bcryptjs';
 import { join } from 'path';
+import { KNEX_CONNECTION } from '../../database/database.module';
 import { writeSecretFile } from '../../common/utils/secret-file';
-import { ipMatches } from '../../common/utils/ip';
-import { hashApiKey } from './api-key-hash';
-import { ApiKey, ApiKeyRole } from './entities/api-key.entity';
-import { CreateApiKeyDto, UpdateApiKeyDto } from './dto';
 import { createLogger } from '../../common/services/logger.service';
+import { ROLE_RANK, UserRole } from './entities/role.entity';
+import { AuthUser } from './entities/user.entity';
+import { CreateUserDto, UpdateUserDto } from './dto';
+import { BCRYPT_ROUNDS, seedRolesAndAdmin } from './auth.seed';
+import { isUniqueConstraintError } from '../../common/utils/unique-constraint.util';
 
-const API_KEY_FILE = join(process.cwd(), 'data', '.api-key');
+const ADMIN_CREDS_FILE = join(process.cwd(), 'data', '.admin-credentials');
 
-/**
- * Resolves the API key to seed on first boot (when no keys exist yet).
- * Precedence: an explicit `API_MASTER_KEY` always wins; otherwise a
- * cryptographically random `owa_k1_` key is generated — the secure default,
- * including in non-production. The legacy fixed `dev-admin-key` is used only when
- * a developer explicitly opts in with `ALLOW_DEV_API_KEY=true`, never by default.
- */
-export function resolveSeedApiKey(): string {
-  if (process.env.API_MASTER_KEY) {
-    return process.env.API_MASTER_KEY;
-  }
-  if (process.env.ALLOW_DEV_API_KEY === 'true') {
-    return 'dev-admin-key';
-  }
-  return `owa_k1_${randomBytes(32).toString('hex')}`;
+/** A user row joined with its role name. */
+interface UserRow {
+  id: string;
+  email: string;
+  name: string;
+  roleId: number;
+  role: UserRole;
+  isActive: boolean;
+  lastLoginAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-/**
- * The line to print for the API key in the startup banner. The full raw key is shown ONLY when it was
- * just created (first run, when the operator needs to capture it once). On every subsequent boot the
- * key is masked to a short non-secret fingerprint, so the live admin key is not re-written to the log
- * pipeline (Docker/Loki/CloudWatch) on each restart — it stays in `data/.api-key` (0600) and the
- * dashboard. A placeholder (e.g. "(check dashboard for keys)") is passed through unchanged.
- */
-export function bannerKeyLine(displayKey: string, isNewKey: boolean): string {
-  if (isNewKey) return displayKey;
-  if (displayKey.startsWith('(')) return displayKey;
-  return `${displayKey.slice(0, 8)}… (full key in data/.api-key or the dashboard)`;
+export interface PublicUser {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  isActive: boolean;
+  lastLoginAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
 @Injectable()
 export class AuthService implements OnModuleInit {
   private readonly logger = createLogger('AuthService');
 
-  /** Coalesce per-request usage-stat writes to at most one DB write per key per window. */
-  private static readonly STAT_FLUSH_INTERVAL_MS = 60_000;
-  /** keyId -> usage increments observed but not yet persisted (flushed on the next windowed write). */
-  private readonly pendingUsage = new Map<string, number>();
-
   constructor(
-    @InjectRepository(ApiKey, 'main')
-    private readonly apiKeyRepository: Repository<ApiKey>,
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
+    private readonly jwt: JwtService,
   ) {}
 
+  /** Seed roles + a first SUPER_ADMIN on boot (zero-config), and print a welcome banner. */
   async onModuleInit(): Promise<void> {
-    // Seed a default API key if none exist
-    const count = await this.apiKeyRepository.count();
-    let displayKey: string;
-    let isNewKey = false;
+    const result = await seedRolesAndAdmin(this.knex);
 
-    if (count === 0) {
-      displayKey = resolveSeedApiKey();
-
-      await this.seedApiKey(displayKey, 'Default Admin Key', ApiKeyRole.ADMIN);
-      isNewKey = true;
-
-      // Save raw key to file for startup script to read (owner-only — it's the raw admin key).
+    if (result.createdAdmin && result.password) {
       try {
-        writeSecretFile(API_KEY_FILE, displayKey);
+        writeSecretFile(ADMIN_CREDS_FILE, `${result.email}\n${result.password}\n`);
       } catch (err) {
-        this.logger.warn('Could not save API key file', { error: String(err) });
-      }
-    } else {
-      // Read saved API key from file if exists
-      if (existsSync(API_KEY_FILE)) {
-        try {
-          displayKey = readFileSync(API_KEY_FILE, 'utf-8').trim();
-        } catch (error) {
-          this.logger.warn(`Failed to read API key file: ${API_KEY_FILE}`, { error: String(error) });
-          displayKey = '(check dashboard for keys)';
-        }
-      } else {
-        displayKey = '(check dashboard for keys)';
+        this.logger.warn('Could not save admin credentials file', { error: String(err) });
       }
     }
 
-    // Always show the welcome banner on startup
     const apiBaseUrl = process.env.BASE_URL || `http://localhost:${process.env.PORT || 2785}`;
-    // The dashboard is served by NestJS at the same origin as the API now, so default to it.
     const dashboardUrl = process.env.DASHBOARD_URL || apiBaseUrl;
-
     this.logger.log('');
     this.logger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    this.logger.log('');
     this.logger.log('  🟢 Welcome to OpenWA - WhatsApp API Gateway');
-    this.logger.log('');
     this.logger.log(`  📊 Dashboard: ${dashboardUrl}`);
     this.logger.log(`  📚 API Docs:  ${apiBaseUrl}/api/docs`);
-    this.logger.log('');
-    if (isNewKey) {
-      this.logger.log('  🔑 API Key (newly created):');
+    if (result.createdAdmin) {
+      this.logger.log('  👤 SUPER_ADMIN account created — sign in at POST /api/auth/login:');
+      this.logger.log(`     email:    ${result.email}`);
+      this.logger.log(
+        result.generated
+          ? `     password: ${result.password}   (also saved to data/.admin-credentials)`
+          : '     password: (as configured via SUPER_ADMIN_PASSWORD)',
+      );
     } else {
-      this.logger.log('  🔑 API Key:');
+      this.logger.log('  👤 Sign in at POST /api/auth/login with your email & password.');
     }
-    this.logger.log(`     ${bannerKeyLine(displayKey, isNewKey)}`);
-    this.logger.log('');
     this.logger.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     this.logger.log('');
   }
 
-  private async seedApiKey(rawKey: string, name: string, role: ApiKeyRole): Promise<ApiKey> {
-    const keyHash = this.hashKey(rawKey);
-    const keyPrefix = rawKey.substring(0, 12);
+  /** Verify email + password and issue a signed JWT. */
+  async login(email: string, password: string): Promise<{ token: string; user: AuthUser }> {
+    const user = (await this.userQuery().where('users.email', email).first()) as UserRow | undefined;
+    // Always run a bcrypt compare (even on a missing user) to avoid a user-enumeration timing signal.
+    const hash = user?.email ? await this.rawHash(user.id) : '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinva';
+    const valid = await bcrypt.compare(password, hash);
+    if (!user || !valid) throw new UnauthorizedException('Invalid credentials');
+    if (!user.isActive) throw new UnauthorizedException('Account is disabled');
 
-    const apiKey = this.apiKeyRepository.create({
-      name,
-      keyHash,
-      keyPrefix,
-      role,
-    });
+    await this.knex('users').where({ id: user.id }).update({ lastLoginAt: new Date(), updatedAt: this.knex.fn.now() });
 
-    return this.apiKeyRepository.save(apiKey);
+    const authUser: AuthUser = { id: user.id, email: user.email, name: user.name, role: user.role };
+    const token = await this.jwt.signAsync({ sub: user.id, email: user.email, name: user.name, role: user.role });
+    return { token, user: authUser };
   }
 
-  async createApiKey(dto: CreateApiKeyDto): Promise<{ apiKey: ApiKey; rawKey: string }> {
-    // Generate secure random key: owa_k1_<32 bytes hex>
-    const rawKey = `owa_k1_${randomBytes(32).toString('hex')}`;
-    const keyHash = this.hashKey(rawKey);
-    const keyPrefix = rawKey.substring(0, 12);
-
-    const apiKey = this.apiKeyRepository.create({
-      name: dto.name,
-      keyHash,
-      keyPrefix,
-      role: dto.role || ApiKeyRole.OPERATOR,
-      allowedIps: dto.allowedIps || null,
-      allowedSessions: dto.allowedSessions || null,
-      expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : null,
-    });
-
-    const saved = await this.apiKeyRepository.save(apiKey);
-    this.logger.log(`API key created: ${saved.name}`, {
-      keyId: saved.id,
-      role: saved.role,
-      action: 'api_key_created',
-    });
-
-    return { apiKey: saved, rawKey };
-  }
-
-  async findAll(): Promise<ApiKey[]> {
-    return this.apiKeyRepository.find({
-      order: { createdAt: 'DESC' },
-    });
-  }
-
-  async findOne(id: string): Promise<ApiKey> {
-    const apiKey = await this.apiKeyRepository.findOne({ where: { id } });
-    if (!apiKey) {
-      throw new NotFoundException(`API key with id '${id}' not found`);
+  /**
+   * Verify a raw JWT (used by non-HTTP entrypoints that don't go through the passport guard:
+   * the WebSocket gateway, the Bull-Board middleware, and the MCP server). Returns the principal.
+   */
+  verifyToken(token: string): AuthUser {
+    try {
+      const payload = this.jwt.verify<{ sub: string; email: string; name: string; role: UserRole }>(token);
+      return { id: payload.sub, email: payload.email, name: payload.name, role: payload.role };
+    } catch {
+      throw new UnauthorizedException('Invalid or expired token');
     }
-    return apiKey;
   }
 
-  async update(id: string, dto: UpdateApiKeyDto): Promise<ApiKey> {
-    const apiKey = await this.findOne(id);
-
-    if (dto.name) apiKey.name = dto.name;
-    if (dto.role) apiKey.role = dto.role;
-    if (dto.allowedIps !== undefined) apiKey.allowedIps = dto.allowedIps;
-    if (dto.allowedSessions !== undefined) apiKey.allowedSessions = dto.allowedSessions;
-    if (dto.expiresAt !== undefined) apiKey.expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : null;
-
-    return this.apiKeyRepository.save(apiKey);
+  /** True when `user`'s role rank meets or exceeds the required role (SUPER_ADMIN > ADMIN > READONLY). */
+  hasRole(user: AuthUser, required: UserRole): boolean {
+    return ROLE_RANK[user.role] >= ROLE_RANK[required];
   }
 
-  async delete(id: string): Promise<void> {
-    const apiKey = await this.findOne(id);
-    // Drop any un-flushed usage accumulator so a deleted key leaves nothing behind in the Map.
-    this.pendingUsage.delete(id);
-    await this.apiKeyRepository.remove(apiKey);
-    this.logger.log(`API key deleted: ${apiKey.name}`, {
-      keyId: id,
-      action: 'api_key_deleted',
-    });
+  async getMe(userId: string): Promise<PublicUser> {
+    const user = (await this.userQuery().where('users.id', userId).first()) as UserRow | undefined;
+    if (!user) throw new NotFoundException('User not found');
+    return this.toPublic(user);
   }
 
-  async revoke(id: string): Promise<ApiKey> {
-    const apiKey = await this.findOne(id);
-    // A revoked key fails validation before its next flush, so its accumulator would orphan —
-    // drop it here.
-    this.pendingUsage.delete(id);
-    apiKey.isActive = false;
-    return this.apiKeyRepository.save(apiKey);
+  // ===== User management (SUPER_ADMIN) =====
+
+  async listUsers(): Promise<PublicUser[]> {
+    const rows = (await this.userQuery().orderBy('users.createdAt', 'desc')) as UserRow[];
+    return rows.map(r => this.toPublic(r));
   }
 
-  async validateApiKey(rawKey: string, clientIp?: string, sessionId?: string): Promise<ApiKey> {
-    const keyHash = this.hashKey(rawKey);
-    const apiKey = await this.apiKeyRepository.findOne({ where: { keyHash } });
-
-    if (!apiKey) {
-      throw new UnauthorizedException('Invalid API key');
+  async createUser(dto: CreateUserDto): Promise<PublicUser> {
+    const roleId = await this.resolveRoleId(dto.role);
+    try {
+      const [row] = (await this.knex('users')
+        .insert({
+          email: dto.email,
+          passwordHash: await bcrypt.hash(dto.password, BCRYPT_ROUNDS),
+          name: dto.name,
+          roleId,
+        })
+        .returning('id')) as Array<{ id: string }>;
+      this.logger.log(`User created: ${dto.email}`, { role: dto.role, action: 'user_created' });
+      return this.getMe(row.id);
+    } catch (err) {
+      if (isUniqueConstraintError(err)) throw new ConflictException(`A user with email '${dto.email}' already exists`);
+      throw err;
     }
-
-    if (!apiKey.isActive) {
-      throw new UnauthorizedException('API key is revoked');
-    }
-
-    if (apiKey.expiresAt && apiKey.expiresAt < new Date()) {
-      throw new UnauthorizedException('API key has expired');
-    }
-
-    // Check IP whitelist (fail closed: if a whitelist is configured but the client
-    // IP could not be determined, reject rather than silently skipping the check)
-    if (apiKey.allowedIps && apiKey.allowedIps.length > 0) {
-      if (!clientIp) {
-        throw new UnauthorizedException('Client IP could not be determined');
-      }
-      if (!this.isIpAllowed(clientIp, apiKey.allowedIps)) {
-        this.logger.warn(`IP not allowed: ${clientIp}`, {
-          keyId: apiKey.id,
-          action: 'ip_rejected',
-        });
-        throw new UnauthorizedException('IP address not allowed');
-      }
-    }
-
-    // Check session restriction
-    if (apiKey.allowedSessions && apiKey.allowedSessions.length > 0 && sessionId) {
-      if (!apiKey.allowedSessions.includes(sessionId)) {
-        throw new UnauthorizedException('API key not authorized for this session');
-      }
-    }
-
-    // Update usage stats — coalesced. Validation above is unchanged/synchronous; only
-    // the stat WRITE is throttled to at most once per key per window. usageCount stays
-    // accurate via an in-memory accumulator; the returned object reflects the true count.
-    const pending = (this.pendingUsage.get(apiKey.id) ?? 0) + 1;
-    const previousLastUsedAt = apiKey.lastUsedAt;
-    apiKey.lastUsedAt = new Date();
-    apiKey.usageCount += pending; // DB value + all not-yet-persisted increments (incl. this request)
-
-    const due =
-      !previousLastUsedAt ||
-      apiKey.lastUsedAt.getTime() - previousLastUsedAt.getTime() >= AuthService.STAT_FLUSH_INTERVAL_MS;
-    if (due) {
-      this.pendingUsage.delete(apiKey.id);
-      await this.apiKeyRepository.save(apiKey);
-    } else {
-      this.pendingUsage.set(apiKey.id, pending);
-    }
-
-    return apiKey;
   }
 
-  private hashKey(rawKey: string): string {
-    return hashApiKey(rawKey, process.env.API_KEY_PEPPER);
+  async updateUser(id: string, dto: UpdateUserDto): Promise<PublicUser> {
+    await this.getMe(id); // 404 if missing
+    const patch: Record<string, unknown> = { updatedAt: this.knex.fn.now() };
+    if (dto.name !== undefined) patch.name = dto.name;
+    if (dto.isActive !== undefined) patch.isActive = dto.isActive;
+    if (dto.role !== undefined) patch.roleId = await this.resolveRoleId(dto.role);
+    if (dto.password !== undefined) patch.passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    await this.knex('users').where({ id }).update(patch);
+    return this.getMe(id);
   }
 
-  private isIpAllowed(clientIp: string, allowedIps: string[]): boolean {
-    // Delegate to the shared, hardened matcher (also used by the throttler and the API-key guard's IP
-    // resolution): it handles both an exact IP entry and CIDR notation, and — unlike the previous local
-    // parser — rejects a malformed octet instead of coercing it into range.
-    return allowedIps.some(entry => ipMatches(clientIp, entry));
+  async deleteUser(id: string, actingUserId: string): Promise<void> {
+    if (id === actingUserId) throw new BadRequestException('You cannot delete your own account');
+    const target = (await this.userQuery().where('users.id', id).first()) as UserRow | undefined;
+    if (!target) throw new NotFoundException('User not found');
+    // Never leave the system without a SUPER_ADMIN.
+    if (target.role === UserRole.SUPER_ADMIN) {
+      const [{ count }] = await this.knex('users')
+        .join('roles', 'users.roleId', 'roles.id')
+        .where('roles.name', UserRole.SUPER_ADMIN)
+        .count<{ count: string }[]>('* as count');
+      if (Number(count) <= 1) throw new BadRequestException('Cannot delete the last SUPER_ADMIN');
+    }
+    await this.knex('users').where({ id }).del();
+    this.logger.log(`User deleted: ${target.email}`, { action: 'user_deleted' });
   }
 
-  hasPermission(apiKey: ApiKey, requiredRole: ApiKeyRole): boolean {
-    const roleHierarchy: Record<ApiKeyRole, number> = {
-      [ApiKeyRole.VIEWER]: 1,
-      [ApiKeyRole.OPERATOR]: 2,
-      [ApiKeyRole.ADMIN]: 3,
+  // ===== helpers =====
+
+  private userQuery(): Knex.QueryBuilder {
+    return this.knex('users')
+      .join('roles', 'users.roleId', 'roles.id')
+      .select(
+        'users.id',
+        'users.email',
+        'users.name',
+        'users.roleId',
+        'users.isActive',
+        'users.lastLoginAt',
+        'users.createdAt',
+        'users.updatedAt',
+        this.knex.ref('roles.name').as('role'),
+      );
+  }
+
+  private async rawHash(userId: string): Promise<string> {
+    const row = (await this.knex('users').where({ id: userId }).select('passwordHash').first()) as
+      | { passwordHash: string }
+      | undefined;
+    return row?.passwordHash ?? '$2a$10$invalidinvalidinvalidinvalidinvalidinvalidinva';
+  }
+
+  private async resolveRoleId(role: UserRole): Promise<number> {
+    const row = (await this.knex('roles').where({ name: role }).select('id').first()) as { id: number } | undefined;
+    if (!row) throw new BadRequestException(`Unknown role '${role}'`);
+    return row.id;
+  }
+
+  private toPublic(row: UserRow): PublicUser {
+    return {
+      id: row.id,
+      email: row.email,
+      name: row.name,
+      role: row.role,
+      isActive: row.isActive,
+      lastLoginAt: row.lastLoginAt,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     };
-
-    return roleHierarchy[apiKey.role] >= roleHierarchy[requiredRole];
   }
 }

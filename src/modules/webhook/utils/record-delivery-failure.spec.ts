@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+import { Repository } from '../../../database/knex';
 import { WebhookDeliveryFailure } from '../entities/webhook-delivery-failure.entity';
 import { recordWebhookDeliveryFailure, statusCodeFromError } from './record-delivery-failure';
 

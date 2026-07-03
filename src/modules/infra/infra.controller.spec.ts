@@ -26,7 +26,7 @@ jest.mock('fs', () => {
   };
 });
 
-import { DataSource } from 'typeorm';
+import { DataSource } from '../../database/knex';
 import { InfraController } from './infra.controller';
 import { REQUIRED_ROLE_KEY } from '../auth/decorators/auth.decorators';
 import { ApiKeyRole } from '../auth/entities/api-key.entity';

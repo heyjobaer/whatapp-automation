@@ -1,5 +1,5 @@
 import { Job } from 'bullmq';
-import { Repository } from 'typeorm';
+import { Repository } from '../../../database/knex';
 import { ConfigService } from '@nestjs/config';
 import { WebhookProcessor } from './webhook.processor';
 import { Webhook } from '../../webhook/entities/webhook.entity';

@@ -1,4 +1,4 @@
-import { Repository } from 'typeorm';
+import { Repository } from '../../database/knex';
 import { LidMappingStoreService } from './lid-mapping-store.service';
 import { LidMapping } from './lid-mapping.entity';
 

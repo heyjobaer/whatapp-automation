@@ -1,4 +1,4 @@
-import { Repository, Between } from 'typeorm';
+import { Repository, Between } from '../../database/knex';
 import { AuditService } from './audit.service';
 import { AuditLog, AuditAction, AuditSeverity } from './entities/audit-log.entity';
 

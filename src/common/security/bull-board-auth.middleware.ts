@@ -1,40 +1,30 @@
 import { Injectable, NestMiddleware, UnauthorizedException, ForbiddenException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Request, Response, NextFunction } from 'express';
 import { AuthService } from '../../modules/auth/auth.service';
-import { ApiKeyRole } from '../../modules/auth/entities/api-key.entity';
-import { resolveClientIp } from '../utils/ip';
+import { UserRole } from '../../modules/auth/entities/role.entity';
 
 /**
  * Protects the Bull Board UI (/admin/queues).
  *
- * Bull Board is mounted as raw Express middleware by @bull-board/nestjs, so the
- * global ApiKeyGuard — which only runs on Nest controller handlers — does not
- * cover it. This middleware requires a valid ADMIN-role API key, supplied via
- * the X-API-Key header or an Authorization: Bearer token.
- *
- * The ?apiKey query-string fallback was removed: an ADMIN key in the
- * URL leaks into proxy/access logs, browser history, bookmarks, and the Referer header.
+ * Bull Board is mounted as raw Express middleware by @bull-board/nestjs, so the global JWT guard —
+ * which only runs on Nest controller handlers — does not cover it. This middleware requires a valid
+ * ADMIN (or SUPER_ADMIN) JWT, supplied via `Authorization: Bearer <token>` (or the `X-API-Key`
+ * header). No query-string fallback — a token in the URL leaks into logs/history.
  */
 @Injectable()
 export class BullBoardAuthMiddleware implements NestMiddleware {
-  constructor(
-    private readonly authService: AuthService,
-    private readonly configService: ConfigService,
-  ) {}
+  constructor(private readonly authService: AuthService) {}
 
-  async use(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  use(req: Request, _res: Response, next: NextFunction): void {
     try {
-      const rawKey = this.extractKey(req);
-      if (!rawKey) {
-        throw new UnauthorizedException('API key is required to access the queue dashboard');
+      const token = this.extractToken(req);
+      if (!token) {
+        throw new UnauthorizedException('Authentication is required to access the queue dashboard');
       }
-
-      const apiKey = await this.authService.validateApiKey(rawKey, this.getClientIp(req));
-      if (!this.authService.hasPermission(apiKey, ApiKeyRole.ADMIN)) {
+      const user = this.authService.verifyToken(token);
+      if (!this.authService.hasRole(user, UserRole.ADMIN)) {
         throw new ForbiddenException('Admin role required to access the queue dashboard');
       }
-
       next();
     } catch (err) {
       // Forward to Nest's exception layer so the response uses the standard format.
@@ -42,21 +32,13 @@ export class BullBoardAuthMiddleware implements NestMiddleware {
     }
   }
 
-  private extractKey(req: Request): string | undefined {
-    const header = req.headers['x-api-key'];
-    if (typeof header === 'string' && header) return header;
-
+  private extractToken(req: Request): string | undefined {
     const authHeader = req.headers['authorization'];
     if (authHeader?.startsWith('Bearer ')) return authHeader.slice(7);
 
-    // No ?apiKey query fallback — an admin key in the URL leaks into logs/history.
-    return undefined;
-  }
+    const header = req.headers['x-api-key'];
+    if (typeof header === 'string' && header) return header;
 
-  private getClientIp(req: Request): string {
-    // Mirror the ApiKeyGuard's IP model so allowedIps is enforced consistently for the queue UI:
-    // X-Forwarded-For is honored only behind a configured trusted proxy.
-    const trustedProxies = this.configService.get<string[]>('security.trustedProxies') ?? [];
-    return resolveClientIp(req, trustedProxies);
+    return undefined;
   }
 }

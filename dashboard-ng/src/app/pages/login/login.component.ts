@@ -24,8 +24,9 @@ export class LoginComponent {
   readonly appVersion = APP_VERSION;
   readonly buildDate = new Date().toLocaleDateString();
 
-  apiKey = '';
-  readonly showKey = signal(false);
+  email = '';
+  password = '';
+  readonly showPassword = signal(false);
   readonly isLoading = signal(false);
   readonly error = signal('');
 
@@ -34,19 +35,21 @@ export class LoginComponent {
   }
 
   async handleSubmit(): Promise<void> {
-    if (!this.apiKey.trim()) {
-      this.error.set(this.lang.t('login.apiKeyRequired'));
+    if (!this.email.trim() || !this.password) {
+      this.error.set(this.lang.t('login.credentialsRequired'));
       return;
     }
     this.isLoading.set(true);
     this.error.set('');
 
     try {
-      const result = await this.auth.login(this.apiKey);
+      const result = await this.auth.login(this.email.trim(), this.password);
       if (result.ok) {
         void this.router.navigate(['/']);
+      } else if (result.message === 'connection') {
+        this.error.set(this.lang.t('login.connectionError'));
       } else {
-        this.error.set(result.message || this.lang.t('login.invalidKey'));
+        this.error.set(result.message || this.lang.t('login.invalidCredentials'));
       }
     } catch {
       this.error.set(this.lang.t('login.connectionError'));

@@ -1,6 +1,8 @@
 import { Injectable } from '@angular/core';
 import type {
-  ApiKey,
+  User,
+  UserRole,
+  LoginResponse,
   AuditLog,
   Chat,
   ChatMessage,
@@ -32,27 +34,27 @@ import type {
 const API_ORIGIN = '';
 export const API_BASE_URL = `${API_ORIGIN.replace(/\/+$/, '')}/api`;
 
-export const API_KEY_STORAGE_KEY = 'openwa_api_key';
+export const TOKEN_STORAGE_KEY = 'openwa_token';
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
 
-  const apiKey = sessionStorage.getItem(API_KEY_STORAGE_KEY);
+  const token = sessionStorage.getItem(TOKEN_STORAGE_KEY);
 
   // For FormData (file uploads) let the browser set multipart/form-data + boundary itself.
   const isFormData = options.body instanceof FormData;
   const headers: HeadersInit = {
     ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-    ...(apiKey ? { 'X-API-Key': apiKey } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
 
   const response = await fetch(url, { ...options, headers });
 
   if (response.status === 401) {
-    // The stored API key is invalid/expired/revoked — clear it and return to login
-    // so the user isn't stuck on a dashboard that 401s every request.
-    sessionStorage.removeItem(API_KEY_STORAGE_KEY);
+    // The stored token is missing/expired — clear it and return to login so the user isn't
+    // stuck on a dashboard that 401s every request.
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
     if (typeof window !== 'undefined') {
       window.location.assign('/');
       // The page is navigating away — halt this request's promise chain so callers neither
@@ -164,20 +166,20 @@ export class ApiService {
       request<CheckNumberResponse>(`/sessions/${sessionId}/contacts/check/${encodeURIComponent(number)}`),
   };
 
-  readonly apiKeys = {
-    list: () => request<ApiKey[]>('/auth/api-keys'),
-    get: (id: string) => request<ApiKey>(`/auth/api-keys/${id}`),
-    create: (data: {
-      name: string;
-      role: string;
-      allowedIps?: string[];
-      allowedSessions?: string[];
-      expiresAt?: string;
-    }) => request<ApiKey>('/auth/api-keys', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id: string, data: Partial<ApiKey>) =>
-      request<ApiKey>(`/auth/api-keys/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-    delete: (id: string) => request<void>(`/auth/api-keys/${id}`, { method: 'DELETE' }),
-    revoke: (id: string) => request<ApiKey>(`/auth/api-keys/${id}/revoke`, { method: 'POST' }),
+  readonly auth = {
+    login: (email: string, password: string) =>
+      request<LoginResponse>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+    me: () => request<User>('/auth/me'),
+  };
+
+  /** SUPER_ADMIN-only user management (replaces the old API-key management). */
+  readonly users = {
+    list: () => request<User[]>('/auth/users'),
+    create: (data: { email: string; password: string; name: string; role: UserRole }) =>
+      request<User>('/auth/users', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<{ name: string; role: UserRole; password: string; isActive: boolean }>) =>
+      request<User>(`/auth/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    delete: (id: string) => request<void>(`/auth/users/${id}`, { method: 'DELETE' }),
   };
 
   readonly audit = {

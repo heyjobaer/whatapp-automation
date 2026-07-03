@@ -54,7 +54,9 @@
     "refresh": "Actualiser",
     "errorGeneric": "Une erreur est survenue",
     "unknownError": "Erreur inconnue",
-    "retry": "Réessayer"
+    "retry": "Réessayer",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "theme": {
     "light": "Clair",
@@ -75,7 +77,8 @@
     "messageTester": "Testeur de messages",
     "infrastructure": "Infrastructure",
     "plugins": "Plugins",
-    "logs": "Journaux"
+    "logs": "Journaux",
+    "users": "Users"
   },
   "chats": {
     "media": {
@@ -145,7 +148,15 @@
     "help": "Besoin d'aide ?",
     "viewDocs": "Voir la documentation",
     "footer": "Fait avec ❤️ par Yudhi Armyndharis et la communauté OpenWA",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in...",
+    "credentialsRequired": "Email and password are required",
+    "invalidCredentials": "Invalid email or password"
   },
   "dashboard": {
     "title": "Tableau de bord",

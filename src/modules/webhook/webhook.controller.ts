@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { WebhookService } from './webhook.service';
 import { CreateWebhookDto, UpdateWebhookDto, WebhookResponseDto } from './dto';
 import { RequireRole } from '../auth/decorators/auth.decorators';
-import { ApiKeyRole } from '../auth/entities/api-key.entity';
+import { UserRole } from '../auth/entities/role.entity';
 
 @ApiTags('webhooks')
 @Controller('sessions/:sessionId/webhooks')
@@ -11,7 +11,7 @@ export class WebhookController {
   constructor(private readonly webhookService: WebhookService) {}
 
   @Post()
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Create a webhook for the session' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiResponse({
@@ -24,7 +24,7 @@ export class WebhookController {
   }
 
   @Get()
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'List all webhooks for a session' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiResponse({
@@ -37,7 +37,7 @@ export class WebhookController {
   }
 
   @Get(':id')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Get a webhook by ID' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiParam({ name: 'id', description: 'Webhook ID' })
@@ -52,7 +52,7 @@ export class WebhookController {
   }
 
   @Put(':id')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Update a webhook' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiParam({ name: 'id', description: 'Webhook ID' })
@@ -71,7 +71,7 @@ export class WebhookController {
   }
 
   @Post(':id/test')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Test a webhook by sending a test payload' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiParam({ name: 'id', description: 'Webhook ID' })
@@ -85,7 +85,7 @@ export class WebhookController {
   }
 
   @Delete(':id')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a webhook' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })

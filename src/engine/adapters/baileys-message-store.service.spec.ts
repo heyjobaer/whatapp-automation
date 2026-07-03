@@ -1,4 +1,4 @@
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, Repository } from '../../database/knex';
 import { BaileysStoredMessage } from './baileys-stored-message.entity';
 import { BaileysMessageStoreService } from './baileys-message-store.service';
 import { Session, SessionStatus } from '../../modules/session/entities/session.entity';

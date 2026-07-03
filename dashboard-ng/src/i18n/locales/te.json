@@ -54,7 +54,9 @@
     "refresh": "రిఫ్రెష్",
     "errorGeneric": "ఒక లోపం సంభవించింది",
     "unknownError": "తెలియని లోపం",
-    "retry": "మళ్లీ ప్రయత్నించండి"
+    "retry": "మళ్లీ ప్రయత్నించండి",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "theme": {
     "light": "లైట్",
@@ -75,7 +77,8 @@
     "messageTester": "మెసేజ్ టెస్టర్",
     "infrastructure": "ఇన్‌ఫ్రాస్ట్రక్చర్",
     "plugins": "ప్లగిన్స్",
-    "logs": "లాగ్స్"
+    "logs": "లాగ్స్",
+    "users": "Users"
   },
   "chats": {
     "media": {
@@ -145,7 +148,15 @@
     "help": "సహాయం కావాలా?",
     "viewDocs": "డాక్యుమెంటేషన్ చూడండి",
     "footer": "Yudhi Armyndharis మరియు OpenWA కమ్యూనిటీ ద్వారా ❤️ తో తయారు చేయబడింది",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in...",
+    "credentialsRequired": "Email and password are required",
+    "invalidCredentials": "Invalid email or password"
   },
   "dashboard": {
     "title": "డ్యాష్‌బోర్డ్",

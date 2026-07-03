@@ -4,7 +4,6 @@ import { BullModule } from '@nestjs/bullmq';
 import { BullBoardModule } from '@bull-board/nestjs';
 import { BullMQAdapter } from '@bull-board/api/bullMQAdapter';
 import { ExpressAdapter } from '@bull-board/express';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { WebhookProcessor } from './processors/webhook.processor';
 import { QUEUE_NAMES } from './queue-names';
 import { Webhook } from '../webhook/entities/webhook.entity';
@@ -17,7 +16,6 @@ export { QUEUE_NAMES } from './queue-names';
 @Module({
   imports: [
     // Required for WebhookProcessor to inject Repository<Webhook> + Repository<WebhookDeliveryFailure>
-    TypeOrmModule.forFeature([Webhook, WebhookDeliveryFailure], 'data'),
     // Required for WebhookProcessor to inject HookManager
     HooksModule,
     BullModule.forRootAsync({

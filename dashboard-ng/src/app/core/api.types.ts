@@ -65,19 +65,22 @@ export interface TemplatePayload {
   footer?: string | null;
 }
 
-export interface ApiKey {
+export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'READONLY';
+
+export interface User {
   id: string;
+  email: string;
   name: string;
-  keyPrefix: string;
-  role: 'admin' | 'operator' | 'viewer';
-  allowedIps?: string[];
-  allowedSessions?: string[];
+  role: UserRole;
   isActive: boolean;
-  expiresAt?: string;
-  lastUsedAt?: string;
-  usageCount: number;
+  lastLoginAt?: string | null;
   createdAt: string;
-  apiKey?: string; // Only returned on creation
+  updatedAt: string;
+}
+
+export interface LoginResponse {
+  token: string;
+  user: { id: string; email: string; name: string; role: UserRole };
 }
 
 export interface AuditLog {

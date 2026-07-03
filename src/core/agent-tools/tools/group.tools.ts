@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApiKeyRole } from '../../../modules/auth/entities/api-key.entity';
+import { UserRole } from '../../../modules/auth/entities/role.entity';
 import type { GroupService } from '../../../modules/group/group.service';
 import type { ToolDescriptor } from '../tool-descriptor';
 
@@ -49,7 +49,7 @@ export function groupTools(group: GroupService): ToolDescriptor[] {
       name: 'GroupCreate',
       description: 'Create a new WhatsApp group with a name and initial participants. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -63,7 +63,7 @@ export function groupTools(group: GroupService): ToolDescriptor[] {
       name: 'GroupAddParticipants',
       description: 'Add participants to an existing group. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -79,7 +79,7 @@ export function groupTools(group: GroupService): ToolDescriptor[] {
       name: 'GroupSetSubject',
       description: 'Change the group name/subject. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -95,7 +95,7 @@ export function groupTools(group: GroupService): ToolDescriptor[] {
       name: 'GroupSetDescription',
       description: 'Change the group description. Pass empty string to clear it. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,

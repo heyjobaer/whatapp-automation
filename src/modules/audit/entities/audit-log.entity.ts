@@ -1,4 +1,8 @@
-import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, Index } from 'typeorm';
+/**
+ * An audit-log row (table `audit_logs`). Plain data class — persistence is handled by the Knex
+ * data-access layer. Audit logs now live in the SAME PostgreSQL database as everything else;
+ * `metadata` is stored as jsonb.
+ */
 
 export enum AuditAction {
   // API Key events
@@ -35,56 +39,34 @@ export enum AuditSeverity {
   ERROR = 'error',
 }
 
-@Entity('audit_logs')
 export class AuditLog {
-  @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Index()
-  @Column({ type: 'varchar', length: 50 })
   action: AuditAction;
 
-  @Column({ type: 'varchar', length: 10, default: AuditSeverity.INFO })
   severity: AuditSeverity;
 
-  @Index()
-  @Column({ type: 'varchar', length: 36, nullable: true })
-  apiKeyId: string | null;
+  userId: string | null;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
-  apiKeyName: string | null;
+  userEmail: string | null;
 
-  @Index()
-  @Column({ type: 'varchar', length: 36, nullable: true })
   sessionId: string | null;
 
-  @Column({ type: 'varchar', length: 100, nullable: true })
   sessionName: string | null;
 
-  @Column({ type: 'varchar', length: 45, nullable: true })
   ipAddress: string | null;
 
-  @Column({ type: 'varchar', length: 500, nullable: true })
   userAgent: string | null;
 
-  @Column({ type: 'varchar', length: 10, nullable: true })
   method: string | null;
 
-  @Column({ type: 'varchar', length: 500, nullable: true })
   path: string | null;
 
-  @Column({ type: 'int', nullable: true })
   statusCode: number | null;
 
-  // The "main" database connection is always SQLite (boot config),
-  // so we use simple-json regardless of the user's data DB choice.
-  @Column({ type: 'simple-json', nullable: true })
   metadata: Record<string, unknown> | null;
 
-  @Column({ type: 'text', nullable: true })
   errorMessage: string | null;
 
-  @Index()
-  @CreateDateColumn()
   createdAt: Date;
 }

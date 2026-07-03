@@ -1,6 +1,7 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable, BadRequestException, Inject } from '@nestjs/common';
+import { Knex } from 'knex';
+import { KNEX_CONNECTION } from '../../database/database.module';
+import { jsonb, toNumber } from '../../database/pg.util';
 import { SessionService } from '../session/session.service';
 import { SendTextMessageDto, SendMediaMessageDto, SendAudioMessageDto, MessageResponseDto } from './dto';
 import { SendTemplateMessageDto } from './dto/send-template.dto';
@@ -28,13 +29,17 @@ export class MessageService {
   private readonly logger = createLogger('MessageService');
 
   constructor(
-    @InjectRepository(Message, 'data')
-    private readonly messageRepository: Repository<Message>,
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
     private readonly sessionService: SessionService,
     private readonly hookManager: HookManager,
     private readonly templateService: TemplateService,
     private readonly lidMappingStore: LidMappingStoreService,
   ) {}
+
+  /** Coerce a raw `messages` row into a Message: `timestamp` (Postgres bigint) reads back as a string. */
+  private mapMsg(row: any): Message {
+    return { ...row, timestamp: toNumber(row.timestamp) } as Message;
+  }
 
   async sendText(sessionId: string, dto: SendTextMessageDto): Promise<MessageResponseDto> {
     // Execute hook before sending - plugins can modify or block
@@ -73,7 +78,7 @@ export class MessageService {
       // The SEND itself failed — mark FAILED and fire the failure hook (a post-send persistence fault is
       // handled separately by persistSentState and must NOT land here).
       message.status = MessageStatus.FAILED;
-      await this.messageRepository.save(message);
+      await this.knex('messages').where({ id: message.id }).update({ status: MessageStatus.FAILED });
       await this.hookManager.execute(
         'message:failed',
         { sessionId, error: error instanceof Error ? error.message : String(error), input: finalDto },
@@ -227,28 +232,28 @@ export class MessageService {
       typeof rawLimit === 'number' && Number.isFinite(rawLimit) ? Math.min(Math.max(Math.trunc(rawLimit), 1), 100) : 50;
     const offset = typeof rawOffset === 'number' && Number.isFinite(rawOffset) ? Math.max(Math.trunc(rawOffset), 0) : 0;
 
-    const query = this.messageRepository
-      .createQueryBuilder('message')
-      .where('message.sessionId = :sessionId', { sessionId })
-      .orderBy('message.createdAt', 'DESC')
-      .skip(offset)
-      .take(limit);
+    const base = this.knex('messages').where('sessionId', sessionId);
 
     if (chatId) {
       // Match across dialects: a stored chatId may be `@s.whatsapp.net` (e.g. an outbound send addressed
       // by a raw engine id) while the caller filters by the neutral `@c.us` from the chat list - same
       // chat, different dialect. Resolving both sides through the table keeps them equal.
-      query.andWhere('message.chatId IN (:...chatIds)', { chatIds: this.resolveJidCandidates(chatId) });
+      base.whereIn('chatId', this.resolveJidCandidates(chatId));
     }
 
     if (from) {
       // Resolve the filter through the lid->phone table so a phone matches not just the stored
       // `<phone>@c.us` id but also any lid that resolves to the same person - turning the prior
       // silent miss (a lid-stored author vs a phone filter) into a hit.
-      query.andWhere('message.from IN (:...froms)', { froms: this.resolveJidCandidates(from) });
+      base.whereIn('from', this.resolveJidCandidates(from));
     }
 
-    const [messages, total] = await query.getManyAndCount();
+    const [rows, countRows] = await Promise.all([
+      base.clone().orderBy('createdAt', 'desc').limit(limit).offset(offset),
+      base.clone().count<{ count: string }[]>('* as count'),
+    ]);
+    const messages = rows.map(row => this.mapMsg(row));
+    const total = Number(countRows[0].count);
     return { messages, total };
   }
 
@@ -354,9 +359,9 @@ export class MessageService {
     // Resolve the quoted message body (best-effort) so the dashboard can render the reply preview.
     let quotedBody = '';
     try {
-      const quoted = await this.messageRepository.findOne({
-        where: { sessionId, waMessageId: dto.quotedMessageId },
-      });
+      const quoted = await this.knex('messages')
+        .where({ sessionId, waMessageId: dto.quotedMessageId })
+        .first();
       quotedBody = quoted?.body || '';
     } catch (err) {
       this.logger.warn(`Failed to resolve quoted message ${dto.quotedMessageId}`, { error: String(err) });
@@ -411,12 +416,15 @@ export class MessageService {
    * Save incoming message (called from session webhook dispatch)
    */
   async saveIncomingMessage(sessionId: string, data: Partial<Message>): Promise<Message> {
-    const message = this.messageRepository.create({
-      ...data,
-      sessionId,
-      direction: MessageDirection.INCOMING,
-    });
-    return this.messageRepository.save(message);
+    const [row] = await this.knex('messages')
+      .insert({
+        ...data,
+        sessionId,
+        direction: MessageDirection.INCOMING,
+        metadata: jsonb(data.metadata ?? null),
+      })
+      .returning('*');
+    return this.mapMsg(row);
   }
 
   /**
@@ -437,20 +445,22 @@ export class MessageService {
     },
   ): Promise<Message> {
     const session = await this.sessionService.findOne(sessionId);
-    const message = this.messageRepository.create({
-      sessionId,
-      waMessageId: data.waMessageId,
-      chatId: data.chatId,
-      from: session?.phone || 'me',
-      to: data.chatId,
-      body: data.body,
-      type: data.type,
-      direction: MessageDirection.OUTGOING,
-      timestamp: data.timestamp,
-      status: data.status ?? MessageStatus.PENDING,
-      metadata: data.metadata,
-    });
-    return this.messageRepository.save(message);
+    const [row] = await this.knex('messages')
+      .insert({
+        sessionId,
+        waMessageId: data.waMessageId,
+        chatId: data.chatId,
+        from: session?.phone || 'me',
+        to: data.chatId,
+        body: data.body,
+        type: data.type,
+        direction: MessageDirection.OUTGOING,
+        timestamp: data.timestamp,
+        status: data.status ?? MessageStatus.PENDING,
+        metadata: jsonb(data.metadata ?? null),
+      })
+      .returning('*');
+    return this.mapMsg(row);
   }
 
   /**
@@ -464,7 +474,9 @@ export class MessageService {
       delete media.data;
     }
     message.status = MessageStatus.FAILED;
-    await this.messageRepository.save(message);
+    await this.knex('messages')
+      .where({ id: message.id })
+      .update({ status: MessageStatus.FAILED, metadata: jsonb(message.metadata) });
   }
 
   /**
@@ -480,7 +492,12 @@ export class MessageService {
     message.status = MessageStatus.SENT;
     message.timestamp = result.timestamp;
     try {
-      await this.messageRepository.save(message);
+      const patch: Record<string, unknown> = {
+        status: MessageStatus.SENT,
+        timestamp: result.timestamp,
+      };
+      if (result.id) patch.waMessageId = result.id;
+      await this.knex('messages').where({ id: message.id }).update(patch);
     } catch (persistError) {
       this.logger.warn(`Persisting SENT state failed after a successful send (id=${result.id})`, {
         error: persistError instanceof Error ? persistError.message : String(persistError),
@@ -536,7 +553,7 @@ export class MessageService {
     // Flag the stored message as revoked. No localized display string is persisted here;
     // the dashboard renders the localized "message deleted" text.
     try {
-      await this.messageRepository.update({ sessionId, waMessageId: dto.messageId }, { body: '', type: 'revoked' });
+      await this.knex('messages').where({ sessionId, waMessageId: dto.messageId }).update({ body: '', type: 'revoked' });
     } catch (err) {
       this.logger.warn(`Failed to flag deleted message ${dto.messageId} as revoked`, { error: String(err) });
     }

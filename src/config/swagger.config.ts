@@ -1,10 +1,10 @@
 import { DocumentBuilder, OpenAPIObject } from '@nestjs/swagger';
 
 /**
- * Security scheme name for the API key, used both when defining the scheme and
- * when applying it as a global requirement so Swagger UI sends the header.
+ * Security scheme name for the JWT bearer token, used both when defining the scheme and when applying
+ * it as a global requirement so Swagger UI sends the Authorization header.
  */
-export const API_KEY_SECURITY_SCHEME = 'X-API-Key';
+export const BEARER_SECURITY_SCHEME = 'bearer';
 
 /**
  * Builds the OpenAPI document configuration for the OpenWA API.
@@ -18,10 +18,10 @@ export function createSwaggerConfig(): Omit<OpenAPIObject, 'paths'> {
       .setTitle('OpenWA API')
       .setDescription('Open Source WhatsApp API Gateway - Free, Self-Hosted HTTP API')
       .setVersion(version)
-      .addApiKey({ type: 'apiKey', name: 'X-API-Key', in: 'header' }, API_KEY_SECURITY_SCHEME)
-      // Apply the scheme globally so Swagger UI sends the key with every request
-      // (mirrors the global ApiKeyGuard). Without this, "Authorize" is cosmetic.
-      .addSecurityRequirements(API_KEY_SECURITY_SCHEME)
+      .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, BEARER_SECURITY_SCHEME)
+      // Apply the scheme globally so Swagger UI sends the token with every request
+      // (mirrors the global JwtAuthGuard). Without this, "Authorize" is cosmetic.
+      .addSecurityRequirements(BEARER_SECURITY_SCHEME)
       .addTag('sessions', 'WhatsApp session management')
       .addTag('messages', 'Send and manage messages')
       .addTag('webhooks', 'Webhook configuration')

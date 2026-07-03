@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken, getDataSourceToken } from '@nestjs/typeorm';
-import { Repository, DataSource, In } from 'typeorm';
+import { getRepositoryToken, getDataSourceToken } from '../../database/knex';
+import { Repository, DataSource, In } from '../../database/knex';
 import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { SessionService, ACK_RECONCILE_DELAY_MS } from './session.service';

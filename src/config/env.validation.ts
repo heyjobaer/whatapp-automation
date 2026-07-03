@@ -1,18 +1,12 @@
-import { resolve } from 'path';
-
 type EnvConfig = Record<string, unknown>;
 
-// The 'main' (auth/audit) connection is always this fixed SQLite file (not env-overridable).
-const MAIN_DB_PATH = './data/main.sqlite';
-
 /**
- * Fail-fast environment validation. Wired as ConfigModule's `validate`
- * callback so a misconfigured deployment is rejected at BOOT instead of silently
- * coercing (e.g. a `DATABASE_TYPE=postgre` typo falling back to SQLite) or failing on
- * the first query. Hand-rolled to avoid adding a `joi` dependency; same guarantees:
- *   - DATABASE_TYPE must be a known value (no silent SQLite fallback on a typo)
- *   - Postgres requires host/username/password
- *   - PORT / DATABASE_PORT / REDIS_PORT must be valid integer ports
+ * Fail-fast environment validation. Wired as ConfigModule's `validate` callback so a misconfigured
+ * deployment is rejected at BOOT instead of failing on the first query. Hand-rolled to avoid adding
+ * a `joi` dependency.
+ *
+ * The project runs on a SINGLE PostgreSQL database (SQLite support removed), so there is no longer a
+ * DATABASE_TYPE / main-vs-data distinction to validate — only that the connection knobs are sane.
  */
 export function validateEnv(config: EnvConfig): EnvConfig {
   const errors: string[] = [];
@@ -21,11 +15,6 @@ export function validateEnv(config: EnvConfig): EnvConfig {
     const value = config[key];
     return typeof value === 'string' && value.trim() !== '' ? value.trim() : undefined;
   };
-
-  const dbType = str('DATABASE_TYPE');
-  if (dbType && dbType !== 'sqlite' && dbType !== 'postgres') {
-    errors.push(`DATABASE_TYPE must be "sqlite" or "postgres" (got "${dbType}")`);
-  }
 
   // Whitelist the registered engine/storage ids so a typo fails fast at boot instead of silently
   // falling back to the default (engine.factory swallows an unknown ENGINE_TYPE → legacy wwebjs;
@@ -38,23 +27,6 @@ export function validateEnv(config: EnvConfig): EnvConfig {
   };
   checkEnum('ENGINE_TYPE', ['whatsapp-web.js', 'baileys']);
   checkEnum('STORAGE_TYPE', ['local', 's3']);
-
-  if (dbType === 'postgres') {
-    for (const key of ['DATABASE_HOST', 'DATABASE_USERNAME', 'DATABASE_PASSWORD']) {
-      if (!str(key)) {
-        errors.push(`${key} is required when DATABASE_TYPE=postgres`);
-      }
-    }
-  } else {
-    // SQLite (explicit or default): DATABASE_NAME is a file path for the 'data' connection. It must
-    // not resolve to the 'main' DB file — two TypeORM connections on one SQLite file run separate
-    // migration ledgers + synchronize policies against the same tables, risking schema divergence and
-    // lock contention. (Postgres DATABASE_NAME is a bare db name, so this never applies there.)
-    const dataDbName = str('DATABASE_NAME');
-    if (dataDbName && resolve(dataDbName) === resolve(MAIN_DB_PATH)) {
-      errors.push(`DATABASE_NAME must not point at the main database file (${MAIN_DB_PATH}); use a separate file`);
-    }
-  }
 
   const checkPort = (key: string): void => {
     const raw = str(key);

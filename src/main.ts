@@ -16,14 +16,12 @@ import {
   isSwaggerEnabled,
   resolveBodyLimit,
   assertNoDefaultSecretsInProduction,
-  isApiKeyPepperMissingInProduction,
 } from './config/bootstrap-security';
 import { BullBoardAuthMiddleware } from './common/security/bull-board-auth.middleware';
 import { AuthService } from './modules/auth/auth.service';
 import { Request, Response, NextFunction, json, urlencoded } from 'express';
 
 async function bootstrap() {
-  // Apply the operator-configured log verbosity (LOG_LEVEL) before anything logs. Unset/invalid → INFO.
   const requestedLevel = process.env.LOG_LEVEL?.trim().toLowerCase();
   if (requestedLevel && (Object.values(LogLevel) as string[]).includes(requestedLevel)) {
     LoggerService.setLogLevel(requestedLevel as LogLevel);
@@ -40,7 +38,6 @@ async function bootstrap() {
   // Fail fast: never start production with default/placeholder secrets.
   assertNoDefaultSecretsInProduction({
     nodeEnv: process.env.NODE_ENV,
-    databaseType: process.env.DATABASE_TYPE,
     databasePassword: process.env.DATABASE_PASSWORD,
     postgresBuiltIn: process.env.POSTGRES_BUILTIN,
     databaseHost: process.env.DATABASE_HOST,
@@ -51,19 +48,10 @@ async function bootstrap() {
     // actually uses (it reads S3_ACCESS_KEY_ID/S3_SECRET_ACCESS_KEY first).
     s3AccessKey: process.env.S3_ACCESS_KEY_ID || process.env.S3_ACCESS_KEY,
     s3SecretKey: process.env.S3_SECRET_ACCESS_KEY || process.env.S3_SECRET_KEY,
-    apiMasterKey: process.env.API_MASTER_KEY,
-    allowDevApiKey: process.env.ALLOW_DEV_API_KEY,
+    jwtSecret: process.env.JWT_SECRET,
+    superAdminPassword: process.env.SUPER_ADMIN_PASSWORD,
     redisPassword: process.env.REDIS_PASSWORD,
   });
-
-  // Advisory (not enforced): without API_KEY_PEPPER, stored API-key hashes use plain SHA-256. Enabling
-  // a pepper re-hashes keys and invalidates existing ones, so we only nudge the operator (see api-key-hash.ts).
-  if (isApiKeyPepperMissingInProduction(process.env.NODE_ENV, process.env.API_KEY_PEPPER)) {
-    bootstrapLogger.warn(
-      'API_KEY_PEPPER is not set in production: stored API-key hashes use plain SHA-256. ' +
-        'Set API_KEY_PEPPER and re-issue keys to enable HMAC hashing.',
-    );
-  }
 
   // Disable Nest's default body parser so we can set an explicit size cap below.
   const app = await NestFactory.create(AppModule, { bodyParser: false });
@@ -186,9 +174,9 @@ async function bootstrap() {
   // @bull-board/nestjs as raw Express middleware that the global ApiKeyGuard
   // does not cover; registering this before app.listen() ensures it runs ahead
   // of the Bull Board router. Requires a valid ADMIN API key.
-  const bullBoardAuth = new BullBoardAuthMiddleware(app.get(AuthService), app.get(ConfigService));
+  const bullBoardAuth = new BullBoardAuthMiddleware(app.get(AuthService));
   app.use('/api/admin/queues', (req: Request, res: Response, next: NextFunction) => {
-    void bullBoardAuth.use(req, res, next);
+    bullBoardAuth.use(req, res, next);
   });
 
   const port = process.env.PORT || 2785;

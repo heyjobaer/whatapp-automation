@@ -1,27 +1,37 @@
 import { Module, Global } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { APP_GUARD } from '@nestjs/core';
-import { ApiKey } from './entities/api-key.entity';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
-import { AuthValidateController } from './auth-validate.controller';
-import { ApiKeyGuard } from './guards/api-key.guard';
+import { JwtStrategy } from './jwt.strategy';
+import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
 import { ProxyAwareThrottlerGuard } from '../../common/security/proxy-aware-throttler.guard';
 
 @Global()
 @Module({
-  imports: [TypeOrmModule.forFeature([ApiKey], 'main')],
-  controllers: [AuthController, AuthValidateController],
+  imports: [
+    PassportModule,
+    JwtModule.registerAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        secret: config.get<string>('auth.jwtSecret') || 'change-me-in-production',
+        // `expiresIn` accepts a `ms`-style string (e.g. "7d") or seconds; cast to satisfy the typing.
+        signOptions: { expiresIn: config.get<string>('auth.jwtExpiresIn', '7d') as unknown as number },
+      }),
+    }),
+  ],
+  controllers: [AuthController],
   providers: [
     AuthService,
-    {
-      provide: APP_GUARD,
-      useClass: ProxyAwareThrottlerGuard,
-    },
-    {
-      provide: APP_GUARD,
-      useClass: ApiKeyGuard,
-    },
+    JwtStrategy,
+    // Rate limiting runs first, then authentication (JWT), then authorization (roles).
+    { provide: APP_GUARD, useClass: ProxyAwareThrottlerGuard },
+    { provide: APP_GUARD, useClass: JwtAuthGuard },
+    { provide: APP_GUARD, useClass: RolesGuard },
   ],
   exports: [AuthService],
 })

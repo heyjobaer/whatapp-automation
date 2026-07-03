@@ -438,7 +438,7 @@ export class InfrastructureComponent implements OnInit {
   }
 
   copyBullMqUrl(): void {
-    // The BullBoard route requires an ADMIN API key in the X-API-Key header — a plain browser tab
+    // The BullBoard route requires an ADMIN JWT in the Authorization header — a plain browser tab
     // can't send one, so copy the URL for use with an authenticated client / reverse proxy.
     const base = API_BASE_URL.startsWith('http') ? API_BASE_URL : `${window.location.origin}${API_BASE_URL}`;
     void copyToClipboard(`${base}/admin/queues`).then(ok => {

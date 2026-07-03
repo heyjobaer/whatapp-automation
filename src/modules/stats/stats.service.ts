@@ -1,8 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { Knex } from 'knex';
+import { KNEX_CONNECTION } from '../../database/database.module';
 import { Session, SessionStatus } from '../session/entities/session.entity';
-import { Message, MessageStatus } from '../message/entities/message.entity';
+import { MessageStatus } from '../message/entities/message.entity';
 import { CacheService } from '../../common/cache';
 
 /**
@@ -78,21 +78,16 @@ export interface SessionStats {
 @Injectable()
 export class StatsService {
   constructor(
-    @InjectRepository(Session, 'data')
-    private readonly sessionRepo: Repository<Session>,
-    @InjectRepository(Message, 'data')
-    private readonly messageRepo: Repository<Message>,
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
     private readonly cacheService: CacheService,
   ) {}
 
-  /** The data-connection dialect ('sqlite' | 'postgres'), used to pick portable date SQL. */
-  private get dataDbType(): string {
-    return this.messageRepo.manager.connection.options.type;
-  }
+  /** Single database is always PostgreSQL now; kept as a field so the portable date SQL helpers work. */
+  private readonly dataDbType = 'postgres';
 
   async getOverview(): Promise<OverviewStats> {
     // Get session stats
-    const sessions = await this.sessionRepo.find();
+    const sessions = (await this.knex('sessions').select('*')) as Session[];
     const byStatus: Record<string, number> = {};
     let active = 0;
 
@@ -105,20 +100,16 @@ export class StatsService {
     const todayStart = new Date();
     todayStart.setHours(0, 0, 0, 0);
 
-    const messageStats = await this.messageRepo
-      .createQueryBuilder('m')
-      .select('m.direction', 'direction')
-      .addSelect('COUNT(*)', 'count')
-      .groupBy('m.direction')
-      .getRawMany<{ direction: string; count: string }>();
+    const messageStats = (await this.knex('messages as m')
+      .select('m.direction as direction')
+      .count('* as count')
+      .groupBy('m.direction')) as Array<{ direction: string; count: string }>;
 
-    const todayStats = await this.messageRepo
-      .createQueryBuilder('m')
-      .select('m.direction', 'direction')
-      .addSelect('COUNT(*)', 'count')
-      .where('m.createdAt >= :todayStart', { todayStart })
-      .groupBy('m.direction')
-      .getRawMany<{ direction: string; count: string }>();
+    const todayStats = (await this.knex('messages as m')
+      .select('m.direction as direction')
+      .count('* as count')
+      .where('m.createdAt', '>=', todayStart)
+      .groupBy('m.direction')) as Array<{ direction: string; count: string }>;
 
     const sent = parseInt(messageStats.find(m => m.direction === 'outgoing')?.count || '0');
     const received = parseInt(messageStats.find(m => m.direction === 'incoming')?.count || '0');
@@ -126,9 +117,10 @@ export class StatsService {
     const todayReceived = parseInt(todayStats.find(m => m.direction === 'incoming')?.count || '0');
 
     // Count failed messages
-    const failed = await this.messageRepo.count({
-      where: { status: MessageStatus.FAILED },
-    });
+    const failed = Number(
+      (await this.knex('messages').where({ status: MessageStatus.FAILED }).count<{ count: string }[]>('* as count'))[0]
+        .count,
+    );
 
     // Cache session stats
     await this.cacheService.setSessionsStats({
@@ -160,13 +152,11 @@ export class StatsService {
     const timeSeries = await this.getTimeSeries(since, interval);
 
     // By type
-    const byTypeRaw = await this.messageRepo
-      .createQueryBuilder('m')
-      .select('m.type', 'type')
-      .addSelect('COUNT(*)', 'count')
-      .where('m.createdAt >= :since', { since })
-      .groupBy('m.type')
-      .getRawMany<{ type: string; count: string }>();
+    const byTypeRaw = (await this.knex('messages as m')
+      .select('m.type as type')
+      .count('* as count')
+      .where('m.createdAt', '>=', since)
+      .groupBy('m.type')) as Array<{ type: string; count: string }>;
 
     const byType: Record<string, number> = {};
     for (const row of byTypeRaw) {
@@ -174,15 +164,12 @@ export class StatsService {
     }
 
     // By session
-    const bySessionRaw = await this.messageRepo
-      .createQueryBuilder('m')
-      .select('m.sessionId', 'sessionId')
-      .addSelect('m.direction', 'direction')
-      .addSelect('COUNT(*)', 'count')
-      .where('m.createdAt >= :since', { since })
-      .groupBy('m.sessionId')
-      .addGroupBy('m.direction')
-      .getRawMany<{ sessionId: string; direction: string; count: string }>();
+    const bySessionRaw = (await this.knex('messages as m')
+      .select('m.sessionId as sessionId')
+      .select('m.direction as direction')
+      .count('* as count')
+      .where('m.createdAt', '>=', since)
+      .groupBy('m.sessionId', 'm.direction')) as Array<{ sessionId: string; direction: string; count: string }>;
 
     const sessionMap = new Map<string, { sent: number; received: number }>();
     for (const row of bySessionRaw) {
@@ -194,7 +181,7 @@ export class StatsService {
       else entry.received = parseInt(row.count);
     }
 
-    const sessions = await this.sessionRepo.find();
+    const sessions = (await this.knex('sessions').select('*')) as Session[];
     const sessionNames = new Map(sessions.map(s => [s.id, s.name]));
 
     const bySession = Array.from(sessionMap.entries()).map(([sessionId, stats]) => ({
@@ -203,18 +190,14 @@ export class StatsService {
       ...stats,
     }));
 
-    // Top chats
-    const topChats = await this.messageRepo
-      .createQueryBuilder('m')
-      .select('m.chatId', 'chatId')
-      .addSelect('COUNT(*)', 'messageCount')
-      .where('m.createdAt >= :since', { since })
+    // Top chats. Order by the aggregate expression (COUNT(*)), not the alias.
+    const topChats = (await this.knex('messages as m')
+      .select('m.chatId as chatId')
+      .count('* as messageCount')
+      .where('m.createdAt', '>=', since)
       .groupBy('m.chatId')
-      // Order by the aggregate expression, not the "messageCount" alias: Postgres folds an unquoted
-      // ORDER BY messageCount to lowercase and 42703s against the quoted alias (SQLite tolerated it).
-      .orderBy('COUNT(*)', 'DESC')
-      .limit(10)
-      .getRawMany<{ chatId: string; messageCount: string }>();
+      .orderByRaw('COUNT(*) DESC')
+      .limit(10)) as Array<{ chatId: string; messageCount: string }>;
 
     return {
       timeSeries,
@@ -228,7 +211,7 @@ export class StatsService {
   }
 
   async getSessionStats(sessionId: string): Promise<SessionStats> {
-    const session = await this.sessionRepo.findOne({ where: { id: sessionId } });
+    const session = (await this.knex('sessions').where({ id: sessionId }).first()) as Session | undefined;
     if (!session) {
       throw new NotFoundException('Session not found');
     }
@@ -237,39 +220,42 @@ export class StatsService {
     todayStart.setHours(0, 0, 0, 0);
 
     // Message counts
-    const stats = await this.messageRepo
-      .createQueryBuilder('m')
-      .select('m.direction', 'direction')
-      .addSelect('COUNT(*)', 'count')
-      .where('m.sessionId = :sessionId', { sessionId })
-      .groupBy('m.direction')
-      .getRawMany<{ direction: string; count: string }>();
+    const stats = (await this.knex('messages as m')
+      .select('m.direction as direction')
+      .count('* as count')
+      .where('m.sessionId', sessionId)
+      .groupBy('m.direction')) as Array<{ direction: string; count: string }>;
 
-    const todayCount = await this.messageRepo
-      .createQueryBuilder('m')
-      .where('m.sessionId = :sessionId', { sessionId })
-      .andWhere('m.createdAt >= :todayStart', { todayStart })
-      .getCount();
+    const todayCount = Number(
+      (
+        await this.knex('messages')
+          .where({ sessionId })
+          .where('createdAt', '>=', todayStart)
+          .count<{ count: string }[]>('* as count')
+      )[0].count,
+    );
 
     const sent = parseInt(stats.find(s => s.direction === 'outgoing')?.count || '0');
     const received = parseInt(stats.find(s => s.direction === 'incoming')?.count || '0');
 
     // Count failed messages for this session
-    const failed = await this.messageRepo.count({
-      where: { sessionId, status: MessageStatus.FAILED },
-    });
+    const failed = Number(
+      (
+        await this.knex('messages')
+          .where({ sessionId, status: MessageStatus.FAILED })
+          .count<{ count: string }[]>('* as count')
+      )[0].count,
+    );
 
     // Top chats for this session
-    const topChats = await this.messageRepo
-      .createQueryBuilder('m')
-      .select('m.chatId', 'chatId')
-      .addSelect('COUNT(*)', 'count')
-      .addSelect(maxCreatedAtSql(this.dataDbType), 'lastActive')
-      .where('m.sessionId = :sessionId', { sessionId })
+    const topChats = (await this.knex('messages as m')
+      .select('m.chatId as chatId')
+      .count('* as count')
+      .select(this.knex.raw(`${maxCreatedAtSql(this.dataDbType)} as "lastActive"`))
+      .where('m.sessionId', sessionId)
       .groupBy('m.chatId')
-      .orderBy('count', 'DESC')
-      .limit(10)
-      .getRawMany<{ chatId: string; count: string; lastActive: string }>();
+      .orderByRaw('COUNT(*) DESC')
+      .limit(10)) as Array<{ chatId: string; count: string; lastActive: string }>;
 
     // Hourly activity (last 24h)
     const hourlyActivity = await this.getHourlyActivity(sessionId);
@@ -303,15 +289,13 @@ export class StatsService {
     // PostgreSQL, so `GROUP BY timestamp` is not read as the output alias and the query 500s
     // ("column m.createdAt must appear in the GROUP BY"). SQLite tolerates it, hence the dialect-only
     // bug. The API field stays `timestamp` (mapped below).
-    const raw = await this.messageRepo
-      .createQueryBuilder('m')
-      .select(timeSeriesTimestampSql(this.dataDbType, interval), 'bucket')
-      .addSelect(`SUM(CASE WHEN m.direction = 'outgoing' THEN 1 ELSE 0 END)`, 'sent')
-      .addSelect(`SUM(CASE WHEN m.direction = 'incoming' THEN 1 ELSE 0 END)`, 'received')
-      .where('m.createdAt >= :since', { since })
-      .groupBy('bucket')
-      .orderBy('bucket', 'ASC')
-      .getRawMany<{ bucket: string; sent: string; received: string }>();
+    const raw = (await this.knex('messages as m')
+      .select(this.knex.raw(`${timeSeriesTimestampSql(this.dataDbType, interval)} as bucket`))
+      .select(this.knex.raw(`SUM(CASE WHEN m.direction = 'outgoing' THEN 1 ELSE 0 END) as sent`))
+      .select(this.knex.raw(`SUM(CASE WHEN m.direction = 'incoming' THEN 1 ELSE 0 END) as received`))
+      .where('m.createdAt', '>=', since)
+      .groupByRaw('bucket')
+      .orderByRaw('bucket ASC')) as Array<{ bucket: string; sent: string; received: string }>;
 
     return raw.map(r => ({
       timestamp: r.bucket,
@@ -323,16 +307,14 @@ export class StatsService {
   private async getHourlyActivity(sessionId: string): Promise<Array<{ hour: number; sent: number; received: number }>> {
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-    const raw = await this.messageRepo
-      .createQueryBuilder('m')
-      .select(hourBucketSql(this.dataDbType), 'hour')
-      .addSelect(`SUM(CASE WHEN m.direction = 'outgoing' THEN 1 ELSE 0 END)`, 'sent')
-      .addSelect(`SUM(CASE WHEN m.direction = 'incoming' THEN 1 ELSE 0 END)`, 'received')
-      .where('m.sessionId = :sessionId', { sessionId })
-      .andWhere('m.createdAt >= :since', { since })
-      .groupBy('hour')
-      .orderBy('hour', 'ASC')
-      .getRawMany<{ hour: string; sent: string; received: string }>();
+    const raw = (await this.knex('messages as m')
+      .select(this.knex.raw(`${hourBucketSql(this.dataDbType)} as hour`))
+      .select(this.knex.raw(`SUM(CASE WHEN m.direction = 'outgoing' THEN 1 ELSE 0 END) as sent`))
+      .select(this.knex.raw(`SUM(CASE WHEN m.direction = 'incoming' THEN 1 ELSE 0 END) as received`))
+      .where('m.sessionId', sessionId)
+      .andWhere('m.createdAt', '>=', since)
+      .groupByRaw('hour')
+      .orderByRaw('hour ASC')) as Array<{ hour: string; sent: string; received: string }>;
 
     // Fill in missing hours
     const result: Array<{ hour: number; sent: number; received: number }> = [];

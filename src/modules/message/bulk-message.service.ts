@@ -1,6 +1,14 @@
-import { Injectable, Logger, BadRequestException, NotFoundException, OnApplicationBootstrap } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+  OnApplicationBootstrap,
+  Inject,
+} from '@nestjs/common';
+import { Knex } from 'knex';
+import { KNEX_CONNECTION } from '../../database/database.module';
+import { jsonb } from '../../database/pg.util';
 import { randomUUID } from 'crypto';
 import {
   MessageBatch,
@@ -63,11 +71,66 @@ export class BulkMessageService implements OnApplicationBootstrap {
   private readonly processingBatches = new Map<string, boolean>(); // Track active batches for cancellation
 
   constructor(
-    @InjectRepository(MessageBatch, 'data')
-    private readonly batchRepository: Repository<MessageBatch>,
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
     private readonly sessionService: SessionService,
     private readonly messageService: MessageService,
   ) {}
+
+  /**
+   * Map the camelCase entity (or a partial patch) onto the snake_case `message_batches` columns.
+   * Only keys actually present are emitted, so this works for both full inserts and partial updates.
+   * The jsonb columns are JSON.stringify-ed via `jsonb()`; they read back already parsed.
+   */
+  private toDb(patch: Partial<MessageBatch>): Record<string, unknown> {
+    const row: Record<string, unknown> = {};
+    if (patch.id !== undefined) row.id = patch.id;
+    if (patch.batchId !== undefined) row.batch_id = patch.batchId;
+    if (patch.sessionId !== undefined) row.session_id = patch.sessionId;
+    if (patch.status !== undefined) row.status = patch.status;
+    if (patch.messages !== undefined) row.messages = jsonb(patch.messages);
+    if (patch.options !== undefined) row.options = jsonb(patch.options);
+    if (patch.progress !== undefined) row.progress = jsonb(patch.progress);
+    if (patch.results !== undefined) row.results = jsonb(patch.results);
+    if (patch.currentIndex !== undefined) row.current_index = patch.currentIndex;
+    if (patch.createdAt !== undefined) row.created_at = patch.createdAt;
+    if (patch.updatedAt !== undefined) row.updated_at = patch.updatedAt;
+    if (patch.startedAt !== undefined) row.started_at = patch.startedAt;
+    if (patch.completedAt !== undefined) row.completed_at = patch.completedAt;
+    return row;
+  }
+
+  /** Map a snake_case `message_batches` row back onto the camelCase entity shape (jsonb already parsed). */
+  private toApi(row: any): MessageBatch {
+    return {
+      id: row.id,
+      batchId: row.batch_id,
+      sessionId: row.session_id,
+      status: row.status,
+      messages: row.messages,
+      options: row.options,
+      progress: row.progress,
+      results: row.results,
+      currentIndex: row.current_index,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      startedAt: row.started_at,
+      completedAt: row.completed_at,
+    };
+  }
+
+  /**
+   * Persist an existing (id-bearing) batch entity: a single-row update by id that bumps `updated_at`,
+   * then re-syncs the in-memory entity from the returned row so callers that keep mutating it stay
+   * consistent with what was written.
+   */
+  private async saveBatch(batch: MessageBatch): Promise<MessageBatch> {
+    const [row] = await this.knex('message_batches')
+      .where({ id: batch.id })
+      .update({ ...this.toDb(batch), updated_at: this.knex.fn.now() })
+      .returning('*');
+    Object.assign(batch, this.toApi(row));
+    return batch;
+  }
 
   /**
    * Transition orphaned batches on startup. A batch still in PROCESSING belongs to a
@@ -76,10 +139,12 @@ export class BulkMessageService implements OnApplicationBootstrap {
    * done here: resuming risks re-sending messages already delivered before the crash.
    */
   async onApplicationBootstrap(): Promise<void> {
-    const orphaned = await this.batchRepository.find({ where: { status: BatchStatus.PROCESSING } });
+    const orphaned = (await this.knex('message_batches').where('status', BatchStatus.PROCESSING)).map(row =>
+      this.toApi(row),
+    );
     for (const batch of orphaned) {
       batch.status = BatchStatus.FAILED;
-      await this.batchRepository.save(batch);
+      await this.saveBatch(batch);
     }
     if (orphaned.length > 0) {
       this.logger.warn(
@@ -110,7 +175,7 @@ export class BulkMessageService implements OnApplicationBootstrap {
     // Check if this batchId already exists FOR THIS SESSION. Scoping by sessionId (matching how
     // getBatchStatus/cancelBatch already query) makes (sessionId, batchId) the namespace: one session
     // can't deny another a batchId, and the 400-vs-202 difference can't probe another session's ids.
-    const existing = await this.batchRepository.findOne({ where: { batchId, sessionId } });
+    const existing = await this.knex('message_batches').where('batch_id', batchId).where('session_id', sessionId).first();
     if (existing) {
       throw new BadRequestException(`Batch ID '${batchId}' already exists`);
     }
@@ -129,18 +194,21 @@ export class BulkMessageService implements OnApplicationBootstrap {
       cancelled: 0,
     };
 
-    const batch = this.batchRepository.create({
-      batchId,
-      sessionId,
-      status: BatchStatus.PENDING,
-      messages: dto.messages as MessageBatch['messages'],
-      options,
-      progress,
-      results: [],
-      currentIndex: 0,
-    });
-
-    await this.batchRepository.save(batch);
+    const [inserted] = await this.knex('message_batches')
+      .insert(
+        this.toDb({
+          batchId,
+          sessionId,
+          status: BatchStatus.PENDING,
+          messages: dto.messages as MessageBatch['messages'],
+          options,
+          progress,
+          results: [],
+          currentIndex: 0,
+        }),
+      )
+      .returning('*');
+    const batch = this.toApi(inserted);
     this.logger.log(`Created batch ${batchId} with ${dto.messages.length} messages`);
 
     // Start processing asynchronously
@@ -152,25 +220,22 @@ export class BulkMessageService implements OnApplicationBootstrap {
   }
 
   async getBatchStatus(sessionId: string, batchId: string): Promise<MessageBatch> {
-    const batch = await this.batchRepository.findOne({
-      where: { batchId, sessionId },
-    });
+    const row = await this.knex('message_batches').where('batch_id', batchId).where('session_id', sessionId).first();
 
-    if (!batch) {
+    if (!row) {
       throw new NotFoundException(`Batch '${batchId}' not found`);
     }
 
-    return batch;
+    return this.toApi(row);
   }
 
   async cancelBatch(sessionId: string, batchId: string): Promise<MessageBatch> {
-    const batch = await this.batchRepository.findOne({
-      where: { batchId, sessionId },
-    });
+    const row = await this.knex('message_batches').where('batch_id', batchId).where('session_id', sessionId).first();
 
-    if (!batch) {
+    if (!row) {
       throw new NotFoundException(`Batch '${batchId}' not found`);
     }
+    const batch = this.toApi(row);
 
     if (batch.status === BatchStatus.COMPLETED || batch.status === BatchStatus.CANCELLED) {
       throw new BadRequestException(`Batch '${batchId}' is already ${batch.status}`);
@@ -185,15 +250,16 @@ export class BulkMessageService implements OnApplicationBootstrap {
     batch.progress.pending = 0;
     batch.completedAt = new Date();
 
-    await this.batchRepository.save(batch);
+    await this.saveBatch(batch);
     this.logger.log(`Cancelled batch ${batchId}`);
 
     return batch;
   }
 
   private async processBatch(batchDbId: string): Promise<void> {
-    const batch = await this.batchRepository.findOne({ where: { id: batchDbId } });
-    if (!batch) return;
+    const row = await this.knex('message_batches').where({ id: batchDbId }).first();
+    if (!row) return;
+    const batch = this.toApi(row);
 
     this.processingBatches.set(batch.id, true);
     // Always release the in-flight marker on every exit path (engine-not-found early return, a thrown
@@ -209,13 +275,13 @@ export class BulkMessageService implements OnApplicationBootstrap {
     // Update status to processing
     batch.status = BatchStatus.PROCESSING;
     batch.startedAt = new Date();
-    await this.batchRepository.save(batch);
+    await this.saveBatch(batch);
 
     const engine = this.sessionService.getEngine(batch.sessionId);
     if (!engine) {
       batch.status = BatchStatus.FAILED;
       batch.completedAt = new Date();
-      await this.batchRepository.save(batch);
+      await this.saveBatch(batch);
       return;
     }
 
@@ -282,13 +348,13 @@ export class BulkMessageService implements OnApplicationBootstrap {
         // Honor a cancellation issued by ANOTHER instance / after a restart — the in-memory Map only
         // sees same-process cancels. Re-read the status BEFORE saving so we don't clobber a CANCELLED
         // back to PROCESSING.
-        const fresh = await this.batchRepository.findOne({ where: { id: batch.id }, select: ['status'] });
+        const fresh = await this.knex('message_batches').where({ id: batch.id }).select('status').first();
         if (fresh?.status === BatchStatus.CANCELLED) {
           cancelledByDb = true;
           this.logger.log(`Batch ${batch.batchId} cancelled (DB) at index ${i}`);
           break;
         }
-        await this.batchRepository.save(batch);
+        await this.saveBatch(batch);
       }
 
       // Delay before next message (except for last)
@@ -304,7 +370,7 @@ export class BulkMessageService implements OnApplicationBootstrap {
     // unconditional save below would clobber it back to a terminal non-cancelled status, so re-read
     // once more here unless we already know the batch was cancelled.
     if (!cancelledByDb) {
-      const fresh = await this.batchRepository.findOne({ where: { id: batch.id }, select: ['status'] });
+      const fresh = await this.knex('message_batches').where({ id: batch.id }).select('status').first();
       if (fresh?.status === BatchStatus.CANCELLED) {
         cancelledByDb = true;
       }
@@ -322,7 +388,7 @@ export class BulkMessageService implements OnApplicationBootstrap {
     // otherwise the message_batches row retains multi-MB media forever. Intermediate (cadence) saves
     // above keep the payload so a batch interrupted mid-run can still resume from currentIndex.
     this.stripBatchMediaPayloads(batch.messages);
-    await this.batchRepository.save(batch);
+    await this.saveBatch(batch);
 
     this.logger.log(`Batch ${batch.batchId} completed: ${batch.progress.sent} sent, ${batch.progress.failed} failed`);
   }

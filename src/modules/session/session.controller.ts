@@ -15,14 +15,11 @@ import { Session } from './entities/session.entity';
 import { ChatSummary } from '../../engine/interfaces/whatsapp-engine.interface';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../audit/entities/audit-log.entity';
-import { RequireRole, CurrentApiKey, SessionScoped } from '../auth/decorators/auth.decorators';
-import { ApiKey, ApiKeyRole } from '../auth/entities/api-key.entity';
+import { RequireRole } from '../auth/decorators/auth.decorators';
+import { UserRole } from '../auth/entities/role.entity';
 
 @ApiTags('sessions')
 @Controller('sessions')
-// The `:id` route param here is a WhatsApp session id, so the ApiKeyGuard enforces a key's
-// allowedSessions scope against it (other controllers' `:id` is an unrelated resource id).
-@SessionScoped()
 export class SessionController {
   constructor(
     private readonly sessionService: SessionService,
@@ -34,7 +31,7 @@ export class SessionController {
   }
 
   @Post()
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Create a new WhatsApp session' })
   @ApiResponse({
     status: 201,
@@ -61,13 +58,11 @@ export class SessionController {
   @ApiQuery({ name: 'limit', required: false, description: 'Max sessions to return (1-1000, default 1000)' })
   @ApiQuery({ name: 'offset', required: false, description: 'Number of sessions to skip (for paging)' })
   async findAll(
-    @CurrentApiKey() apiKey?: ApiKey,
     @Query('limit') limit?: string,
     @Query('offset') offset?: string,
   ): Promise<SessionResponseDto[]> {
-    // Scope to the key's allowedSessions so a session-restricted key cannot enumerate every
-    // session. A null/empty allowlist (e.g. ADMIN) still lists all.
-    const sessions = await this.sessionService.findAll(apiKey?.allowedSessions, {
+    // Authenticated users see all sessions (subject to their role); there is no per-user session scope.
+    const sessions = await this.sessionService.findAll(null, {
       limit: limit ? parseInt(limit, 10) : undefined,
       offset: offset ? parseInt(offset, 10) : undefined,
     });
@@ -89,7 +84,7 @@ export class SessionController {
   }
 
   @Delete(':id')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a session' })
   @ApiParam({ name: 'id', description: 'Session ID' })
@@ -105,7 +100,7 @@ export class SessionController {
   }
 
   @Post(':id/start')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({
     summary: 'Start a session and initialize WhatsApp connection',
   })
@@ -127,7 +122,7 @@ export class SessionController {
   }
 
   @Post(':id/stop')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Stop a session and disconnect WhatsApp' })
   @ApiParam({ name: 'id', description: 'Session ID' })
   @ApiResponse({
@@ -146,7 +141,7 @@ export class SessionController {
   }
 
   @Post(':id/force-kill')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Force-kill a stuck session (SIGKILL its wedged engine, then tear it down)' })
   @ApiParam({ name: 'id', description: 'Session ID' })
   @ApiResponse({
@@ -165,7 +160,7 @@ export class SessionController {
   }
 
   @Get(':id/qr')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Get QR code for session authentication' })
   @ApiParam({ name: 'id', description: 'Session ID' })
   @ApiResponse({
@@ -187,7 +182,7 @@ export class SessionController {
   }
 
   @Post(':id/pairing-code')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Request an 8-char pairing code to link via phone number (alternative to QR)' })
   @ApiParam({ name: 'id', description: 'Session ID' })
   @ApiResponse({ status: 201, description: 'Pairing code generated', type: PairingCodeResponseDto })
@@ -242,7 +237,7 @@ export class SessionController {
   }
 
   @Post(':id/chats/read')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Mark a chat as read/seen' })
   @ApiParam({ name: 'id', description: 'Session ID' })
   @ApiResponse({ status: 200, description: 'Chat marked as read successfully' })
@@ -254,7 +249,7 @@ export class SessionController {
   }
 
   @Post(':id/chats/unread')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Mark a chat as unread' })
   @ApiParam({ name: 'id', description: 'Session ID' })
   @ApiResponse({ status: 200, description: 'Chat marked as unread successfully' })
@@ -266,7 +261,7 @@ export class SessionController {
   }
 
   @Post(':id/chats/delete')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Delete a chat from the chat list (e.g. a group you have left)' })
   @ApiParam({ name: 'id', description: 'Session ID' })
   @ApiResponse({ status: 200, description: 'Chat deleted successfully' })
@@ -278,7 +273,7 @@ export class SessionController {
   }
 
   @Post(':id/chats/typing')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: "Send a typing/recording presence indicator to a chat (or clear it with 'paused')" })
   @ApiParam({ name: 'id', description: 'Session ID' })
   @ApiResponse({ status: 200, description: 'Presence sent' })
@@ -296,7 +291,7 @@ export class SessionController {
     status: 200,
     description: 'Session statistics including counts and memory usage',
   })
-  async getStats(@CurrentApiKey() apiKey?: ApiKey): Promise<{
+  async getStats(): Promise<{
     total: number;
     active: number;
     ready: number;
@@ -304,8 +299,6 @@ export class SessionController {
     byStatus: Record<string, number>;
     memoryUsage: { heapUsed: number; heapTotal: number; rss: number };
   }> {
-    // Scope aggregate stats to the key's allowedSessions so a session-restricted key cannot enumerate
-    // global session counts/status (the route carries no :id for the guard to scope against).
-    return this.sessionService.getStats(apiKey?.allowedSessions);
+    return this.sessionService.getStats(null);
   }
 }

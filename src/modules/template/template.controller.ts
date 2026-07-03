@@ -4,7 +4,7 @@ import { TemplateService } from './template.service';
 import { CreateTemplateDto, UpdateTemplateDto, TemplateResponseDto } from './dto';
 import { Template } from './entities/template.entity';
 import { RequireRole } from '../auth/decorators/auth.decorators';
-import { ApiKeyRole } from '../auth/entities/api-key.entity';
+import { UserRole } from '../auth/entities/role.entity';
 
 @ApiTags('templates')
 @Controller('sessions/:sessionId/templates')
@@ -12,7 +12,7 @@ export class TemplateController {
   constructor(private readonly templateService: TemplateService) {}
 
   @Post()
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Create a message template for the session' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiResponse({ status: 201, description: 'Template created', type: TemplateResponseDto })
@@ -21,7 +21,7 @@ export class TemplateController {
   }
 
   @Get()
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'List all templates for a session' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiResponse({ status: 200, description: 'List of templates', type: [TemplateResponseDto] })
@@ -30,7 +30,7 @@ export class TemplateController {
   }
 
   @Get(':id')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Get a template by ID' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiParam({ name: 'id', description: 'Template ID' })
@@ -41,7 +41,7 @@ export class TemplateController {
   }
 
   @Put(':id')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Update a template' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })
   @ApiParam({ name: 'id', description: 'Template ID' })
@@ -56,7 +56,7 @@ export class TemplateController {
   }
 
   @Delete(':id')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a template' })
   @ApiParam({ name: 'sessionId', description: 'Session ID' })

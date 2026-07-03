@@ -1,5 +1,5 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getDataSourceToken } from '@nestjs/typeorm';
+import { getDataSourceToken } from '../../database/knex';
 import { ServiceUnavailableException } from '@nestjs/common';
 import { HealthController } from './health.controller';
 import { ShutdownService } from '../../common/services/shutdown.service';

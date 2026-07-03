@@ -54,7 +54,9 @@
     "refresh": "刷新",
     "errorGeneric": "发生错误",
     "unknownError": "未知错误",
-    "retry": "重试"
+    "retry": "重试",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "theme": {
     "light": "浅色",
@@ -75,7 +77,8 @@
     "messageTester": "消息测试器",
     "infrastructure": "基础设施",
     "plugins": "插件",
-    "logs": "日志"
+    "logs": "日志",
+    "users": "Users"
   },
   "chats": {
     "media": {
@@ -145,7 +148,15 @@
     "help": "需要帮助？",
     "viewDocs": "查看文档",
     "footer": "由 Yudhi Armyndharis 和 OpenWA 社区用 ❤️ 打造",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in...",
+    "credentialsRequired": "Email and password are required",
+    "invalidCredentials": "Invalid email or password"
   },
   "dashboard": {
     "title": "仪表盘",

@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { getRepositoryToken } from '../../database/knex';
+import { Repository } from '../../database/knex';
 import { BadRequestException, NotFoundException, PayloadTooLargeException } from '@nestjs/common';
 import { MessageService } from './message.service';
 import { Message, MessageDirection, MessageStatus } from './entities/message.entity';

@@ -1,5 +1,5 @@
 import { Routes } from '@angular/router';
-import { adminGuard, authGuard } from './core/guards';
+import { adminGuard, authGuard, superAdminGuard } from './core/guards';
 import { LayoutComponent } from './layout/layout.component';
 
 export const routes: Routes = [
@@ -18,9 +18,9 @@ export const routes: Routes = [
       { path: 'webhooks', loadComponent: () => import('./pages/webhooks/webhooks.component').then(m => m.WebhooksComponent) },
       { path: 'templates', loadComponent: () => import('./pages/templates/templates.component').then(m => m.TemplatesComponent) },
       {
-        path: 'api-keys',
-        canActivate: [adminGuard],
-        loadComponent: () => import('./pages/api-keys/api-keys.component').then(m => m.ApiKeysComponent),
+        path: 'users',
+        canActivate: [superAdminGuard],
+        loadComponent: () => import('./pages/users/users.component').then(m => m.UsersComponent),
       },
       { path: 'logs', loadComponent: () => import('./pages/logs/logs.component').then(m => m.LogsComponent) },
       {

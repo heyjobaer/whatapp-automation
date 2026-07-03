@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { io, Socket } from 'socket.io-client';
-import { API_KEY_STORAGE_KEY } from './api.service';
+import { TOKEN_STORAGE_KEY } from './api.service';
 
 export interface SessionStatusEvent {
   sessionId: string;
@@ -98,9 +98,9 @@ export class SocketService {
   connect(): void {
     if (this.socket?.connected || this.socket?.active) return;
 
-    const apiKey = sessionStorage.getItem(API_KEY_STORAGE_KEY);
-    if (!apiKey) {
-      console.warn('[WebSocket] No API key found, skipping connection');
+    const token = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!token) {
+      console.warn('[WebSocket] No auth token found, skipping connection');
       return;
     }
 
@@ -110,10 +110,10 @@ export class SocketService {
       reconnection: true,
       reconnectionAttempts: 5,
       reconnectionDelay: 1000,
-      // Send the key via `auth` (and a header for proxies). NOT via `query` — a key in the
-      // handshake URL leaks into access logs / Referer. The gateway reads auth first.
-      auth: { apiKey },
-      extraHeaders: { 'X-API-Key': apiKey },
+      // Send the JWT via `auth` (and an Authorization header for proxies). NOT via `query` — a token
+      // in the handshake URL leaks into access logs / Referer. The gateway reads auth first.
+      auth: { token },
+      extraHeaders: { Authorization: `Bearer ${token}` },
     });
 
     this.socket.on('connect', () => {

@@ -1,13 +1,13 @@
-import { Controller, Get, Put, Post, Body, BadRequestException, Optional } from '@nestjs/common';
+import { Controller, Get, Put, Post, Body, BadRequestException, Optional, Inject } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { QUEUE_NAMES } from '../queue/queue-names';
 import { ConfigService } from '@nestjs/config';
-import { DataSource } from 'typeorm';
-import { InjectDataSource } from '@nestjs/typeorm';
+import { Knex } from 'knex';
+import { KNEX_CONNECTION } from '../../database/database.module';
 import { Public, RequireRole } from '../auth/decorators/auth.decorators';
-import { ApiKeyRole } from '../auth/entities/api-key.entity';
+import { UserRole } from '../auth/entities/role.entity';
 import { isPathWithin } from '../../common/utils/path-safety';
 import { writeSecretFile } from '../../common/utils/secret-file';
 import { EngineFactory } from '../../engine/engine.factory';
@@ -232,10 +232,8 @@ export class InfraController {
 
   constructor(
     private readonly configService: ConfigService,
-    @InjectDataSource('main')
-    private readonly mainDataSource: DataSource,
-    @InjectDataSource('data')
-    private readonly dataDataSource: DataSource,
+    @Inject(KNEX_CONNECTION)
+    private readonly knex: Knex,
     private readonly engineFactory: EngineFactory,
     private readonly dockerService: DockerService,
     private readonly cacheService: CacheService,
@@ -247,16 +245,19 @@ export class InfraController {
   ) {}
 
   @Get('status')
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get infrastructure status' })
   @ApiResponse({ status: 200, description: 'Infrastructure status' })
   async getStatus(): Promise<InfraStatus> {
-    // Check both database connections
-    const mainDbConnected = this.mainDataSource.isInitialized;
-    const dataDbConnected = this.dataDataSource.isInitialized;
-    const dbConnected = mainDbConnected && dataDbConnected;
-    const dbType = this.configService.get<string>('dataDatabase.type', 'sqlite');
-    const dbHost = this.configService.get<string>('dataDatabase.host', 'localhost');
+    // Single PostgreSQL database now — probe it once with a trivial query.
+    let dbConnected = true;
+    try {
+      await this.knex.raw('SELECT 1');
+    } catch {
+      dbConnected = false;
+    }
+    const dbType = this.configService.get<string>('database.type', 'postgres');
+    const dbHost = this.configService.get<string>('database.host', 'localhost');
 
     const redisHost = process.env.REDIS_HOST || this.configService.get<string>('redis.host', 'localhost');
     const redisPort = parseInt(process.env.REDIS_PORT || '', 10) || this.configService.get<number>('redis.port', 6379);
@@ -377,7 +378,7 @@ export class InfraController {
   }
 
   @Get('engines')
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get available WhatsApp engines' })
   @ApiResponse({ status: 200, description: 'List of available engines' })
   getEngines(): Array<{ id: string; name: string; enabled: boolean; features: string[] }> {
@@ -385,7 +386,7 @@ export class InfraController {
   }
 
   @Get('engines/current')
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get current active engine' })
   @ApiResponse({ status: 200, description: 'Current engine info' })
   getCurrentEngine(): { engineType: string } {
@@ -393,7 +394,7 @@ export class InfraController {
   }
 
   @Get('config')
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Read the saved infrastructure configuration for the dashboard form' })
   @ApiResponse({ status: 200, description: 'Saved configuration (secrets omitted)' })
   getConfig(): SavedConfigResponse {
@@ -443,7 +444,7 @@ export class InfraController {
   }
 
   @Put('config')
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Save infrastructure configuration to .env file' })
   @ApiResponse({ status: 200, description: 'Configuration saved' })
   @ApiBody({ description: 'Configuration to save' })
@@ -638,7 +639,7 @@ export class InfraController {
     }
   }
   @Post('restart')
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Request server restart with Docker orchestration' })
   @ApiResponse({ status: 200, description: 'Server will restart with new profiles' })
   async requestRestart(@Body() body?: { profiles?: string[]; profilesToRemove?: string[] }): Promise<{
@@ -757,7 +758,7 @@ export class InfraController {
   }
 
   @Get('export-data')
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Export all data from Data DB for migration' })
   @ApiResponse({ status: 200, description: 'Exported data as JSON' })
   async exportData(): Promise<{
@@ -775,8 +776,8 @@ export class InfraController {
     };
   }> {
     // Get all entities from Data DB
-    const sessions = await this.dataDataSource.query<SessionRow[]>('SELECT * FROM sessions');
-    const webhooks = await this.dataDataSource.query<WebhookRow[]>('SELECT * FROM webhooks');
+    const sessions = ((await this.knex('sessions').select('*')) as SessionRow[]);
+    const webhooks = ((await this.knex('webhooks').select('*')) as WebhookRow[]);
 
     // These tables may not exist yet (older DB) or be empty.
     let messages: MessageRow[] = [];
@@ -786,40 +787,38 @@ export class InfraController {
     let lidMappings: LidMappingRow[] = [];
 
     try {
-      messages = await this.dataDataSource.query<MessageRow[]>('SELECT * FROM messages');
+      messages = ((await this.knex('messages').select('*')) as MessageRow[]);
     } catch (error) {
       this.logger.debug('Messages table not available for export', { error: String(error) });
     }
 
     try {
-      messageBatches = await this.dataDataSource.query<MessageBatchRow[]>('SELECT * FROM message_batches');
+      messageBatches = ((await this.knex('message_batches').select('*')) as MessageBatchRow[]);
     } catch (error) {
       this.logger.debug('Message batches table not available for export', { error: String(error) });
     }
 
     try {
-      templates = await this.dataDataSource.query<TemplateRow[]>('SELECT * FROM templates');
+      templates = ((await this.knex('templates').select('*')) as TemplateRow[]);
     } catch (error) {
       this.logger.debug('Templates table not available for export', { error: String(error) });
     }
 
     try {
-      baileysStoredMessages = await this.dataDataSource.query<BaileysStoredMessageRow[]>(
-        'SELECT * FROM baileys_stored_messages',
-      );
+      baileysStoredMessages = ((await this.knex('baileys_stored_messages').select('*')) as BaileysStoredMessageRow[]);
     } catch (error) {
       this.logger.debug('Baileys stored messages table not available for export', { error: String(error) });
     }
 
     try {
-      lidMappings = await this.dataDataSource.query<LidMappingRow[]>('SELECT * FROM lid_mappings');
+      lidMappings = ((await this.knex('lid_mappings').select('*')) as LidMappingRow[]);
     } catch (error) {
       this.logger.debug('Lid mappings table not available for export', { error: String(error) });
     }
 
     return {
       exportedAt: new Date().toISOString(),
-      dataDbType: this.configService.get<string>('dataDatabase.type', 'sqlite'),
+      dataDbType: this.configService.get<string>('database.type', 'postgres'),
       tables: {
         sessions,
         webhooks,
@@ -842,7 +841,7 @@ export class InfraController {
   }
 
   @Post('import-data')
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Import data to Data DB (replaces existing data)' })
   @ApiBody({
     description: 'Exported data from export-data endpoint',
@@ -881,48 +880,46 @@ export class InfraController {
     warnings: string[];
   }> {
     const warnings: string[] = [];
-    const queryRunner = this.dataDataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
+    // Serialize a value for a jsonb column, passing an already-serialized string through unchanged
+    // (an older export may carry the raw text form).
+    const asJson = (v: unknown): string | null =>
+      v == null ? null : typeof v === 'string' ? v : JSON.stringify(v);
+
+    const trx = await this.knex.transaction();
 
     try {
       // Clear existing data (in correct order due to foreign keys). templates and
       // baileys_stored_messages FK sessions ON DELETE CASCADE, so the sessions DELETE would clear
-      // them too; clearing them explicitly first keeps the order correct on engines where the
-      // cascade is not enforced, and is a no-op when the table doesn't exist.
-      await queryRunner.query('DELETE FROM webhooks');
-      await queryRunner.query('DELETE FROM messages').catch(() => {});
-      await queryRunner.query('DELETE FROM message_batches').catch(() => {});
-      await queryRunner.query('DELETE FROM templates').catch(() => {});
-      await queryRunner.query('DELETE FROM baileys_stored_messages').catch(() => {});
+      // them too; clearing them explicitly first keeps the order correct.
+      await trx('webhooks').del();
+      await trx('messages').del();
+      await trx('message_batches').del();
+      await trx('templates').del();
+      await trx('baileys_stored_messages').del();
       // lid_mappings is not a FK to sessions, so the sessions DELETE below won't clear it; clear it
       // explicitly so a restore replaces the cache rather than colliding on existing lid PKs.
-      await queryRunner.query('DELETE FROM lid_mappings').catch(() => {});
-      await queryRunner.query('DELETE FROM sessions');
+      await trx('lid_mappings').del();
+      await trx('sessions').del();
 
       // Import sessions first
       let sessionsCount = 0;
       if (data.tables.sessions?.length) {
         for (const session of data.tables.sessions) {
           try {
-            await queryRunner.query(
-              `INSERT INTO sessions (id, name, status, phone, "pushName", config, "proxyUrl", "proxyType", "connectedAt", "lastActiveAt", "createdAt", "updatedAt") 
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-              [
-                session.id,
-                session.name,
-                session.status,
-                session.phone,
-                session.pushName,
-                typeof session.config === 'string' ? session.config : JSON.stringify(session.config || {}),
-                session.proxyUrl,
-                session.proxyType,
-                session.connectedAt,
-                session.lastActiveAt,
-                session.createdAt,
-                session.updatedAt,
-              ],
-            );
+            await trx('sessions').insert({
+              id: session.id,
+              name: session.name,
+              status: session.status,
+              phone: session.phone,
+              pushName: session.pushName,
+              config: asJson(session.config ?? {}),
+              proxyUrl: session.proxyUrl,
+              proxyType: session.proxyType,
+              connectedAt: session.connectedAt,
+              lastActiveAt: session.lastActiveAt,
+              createdAt: session.createdAt,
+              updatedAt: session.updatedAt,
+            });
             sessionsCount++;
           } catch (err) {
             warnings.push(`Failed to import session ${session.id}: ${err}`);
@@ -935,28 +932,20 @@ export class InfraController {
       if (data.tables.webhooks?.length) {
         for (const webhook of data.tables.webhooks) {
           try {
-            await queryRunner.query(
-              `INSERT INTO webhooks (id, "sessionId", url, events, secret, headers, filters, active, "retryCount", "lastTriggeredAt", "createdAt", "updatedAt")
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-              [
-                webhook.id,
-                webhook.sessionId,
-                webhook.url,
-                typeof webhook.events === 'string' ? webhook.events : JSON.stringify(webhook.events || []),
-                webhook.secret,
-                typeof webhook.headers === 'string' ? webhook.headers : JSON.stringify(webhook.headers || {}),
-                webhook.filters == null
-                  ? null
-                  : typeof webhook.filters === 'string'
-                    ? webhook.filters
-                    : JSON.stringify(webhook.filters),
-                webhook.active,
-                webhook.retryCount,
-                webhook.lastTriggeredAt,
-                webhook.createdAt,
-                webhook.updatedAt,
-              ],
-            );
+            await trx('webhooks').insert({
+              id: webhook.id,
+              sessionId: webhook.sessionId,
+              url: webhook.url,
+              events: asJson(webhook.events ?? []),
+              secret: webhook.secret,
+              headers: asJson(webhook.headers ?? {}),
+              filters: asJson(webhook.filters),
+              active: webhook.active,
+              retryCount: webhook.retryCount,
+              lastTriggeredAt: webhook.lastTriggeredAt,
+              createdAt: webhook.createdAt,
+              updatedAt: webhook.updatedAt,
+            });
             webhooksCount++;
           } catch (err) {
             warnings.push(`Failed to import webhook ${webhook.id}: ${err}`);
@@ -969,29 +958,21 @@ export class InfraController {
       if (data.tables.messages?.length) {
         for (const msg of data.tables.messages) {
           try {
-            await queryRunner.query(
-              `INSERT INTO messages (id, "sessionId", "waMessageId", "chatId", "from", "to", body, type, direction, "timestamp", metadata, status, "createdAt")
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-              [
-                msg.id,
-                msg.sessionId,
-                msg.waMessageId ?? null,
-                msg.chatId,
-                msg.from,
-                msg.to,
-                msg.body ?? null,
-                msg.type,
-                msg.direction,
-                msg.timestamp ?? null,
-                msg.metadata == null
-                  ? null
-                  : typeof msg.metadata === 'string'
-                    ? msg.metadata
-                    : JSON.stringify(msg.metadata),
-                msg.status,
-                msg.createdAt,
-              ],
-            );
+            await trx('messages').insert({
+              id: msg.id,
+              sessionId: msg.sessionId,
+              waMessageId: msg.waMessageId ?? null,
+              chatId: msg.chatId,
+              from: msg.from,
+              to: msg.to,
+              body: msg.body ?? null,
+              type: msg.type,
+              direction: msg.direction,
+              timestamp: msg.timestamp ?? null,
+              metadata: asJson(msg.metadata),
+              status: msg.status,
+              createdAt: msg.createdAt,
+            });
             messagesCount++;
           } catch (err) {
             warnings.push(`Failed to import message ${msg.id}: ${err}`);
@@ -999,42 +980,26 @@ export class InfraController {
         }
       }
 
-      // Import message batches (optional)
+      // Import message batches (optional). This table uses snake_case columns.
       let messageBatchesCount = 0;
       if (data.tables.messageBatches?.length) {
         for (const batch of data.tables.messageBatches) {
           try {
-            await queryRunner.query(
-              `INSERT INTO message_batches (id, batch_id, session_id, status, messages, options, progress, results, current_index, created_at, updated_at, started_at, completed_at)
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
-              [
-                batch.id,
-                batch.batch_id,
-                batch.session_id,
-                batch.status,
-                typeof batch.messages === 'string' ? batch.messages : JSON.stringify(batch.messages ?? []),
-                batch.options == null
-                  ? null
-                  : typeof batch.options === 'string'
-                    ? batch.options
-                    : JSON.stringify(batch.options),
-                batch.progress == null
-                  ? null
-                  : typeof batch.progress === 'string'
-                    ? batch.progress
-                    : JSON.stringify(batch.progress),
-                batch.results == null
-                  ? null
-                  : typeof batch.results === 'string'
-                    ? batch.results
-                    : JSON.stringify(batch.results),
-                batch.current_index,
-                batch.created_at,
-                batch.updated_at,
-                batch.started_at,
-                batch.completed_at,
-              ],
-            );
+            await trx('message_batches').insert({
+              id: batch.id,
+              batch_id: batch.batch_id,
+              session_id: batch.session_id,
+              status: batch.status,
+              messages: asJson(batch.messages ?? []),
+              options: asJson(batch.options),
+              progress: asJson(batch.progress),
+              results: asJson(batch.results),
+              current_index: batch.current_index,
+              created_at: batch.created_at,
+              updated_at: batch.updated_at,
+              started_at: batch.started_at,
+              completed_at: batch.completed_at,
+            });
             messageBatchesCount++;
           } catch (err) {
             warnings.push(`Failed to import message batch ${batch.id}: ${err}`);
@@ -1047,20 +1012,16 @@ export class InfraController {
       if (data.tables.templates?.length) {
         for (const tpl of data.tables.templates) {
           try {
-            await queryRunner.query(
-              `INSERT INTO templates (id, "sessionId", name, body, header, footer, "createdAt", "updatedAt")
-               VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-              [
-                tpl.id,
-                tpl.sessionId,
-                tpl.name,
-                tpl.body,
-                tpl.header ?? null,
-                tpl.footer ?? null,
-                tpl.createdAt,
-                tpl.updatedAt,
-              ],
-            );
+            await trx('templates').insert({
+              id: tpl.id,
+              sessionId: tpl.sessionId,
+              name: tpl.name,
+              body: tpl.body,
+              header: tpl.header ?? null,
+              footer: tpl.footer ?? null,
+              createdAt: tpl.createdAt,
+              updatedAt: tpl.updatedAt,
+            });
             templatesCount++;
           } catch (err) {
             warnings.push(`Failed to import template ${tpl.id}: ${err}`);
@@ -1073,11 +1034,13 @@ export class InfraController {
       if (data.tables.baileysStoredMessages?.length) {
         for (const bsm of data.tables.baileysStoredMessages) {
           try {
-            await queryRunner.query(
-              `INSERT INTO baileys_stored_messages (id, "sessionId", "waMessageId", "serializedMessage", "createdAt")
-               VALUES ($1, $2, $3, $4, $5)`,
-              [bsm.id, bsm.sessionId, bsm.waMessageId, bsm.serializedMessage, bsm.createdAt],
-            );
+            await trx('baileys_stored_messages').insert({
+              id: bsm.id,
+              sessionId: bsm.sessionId,
+              waMessageId: bsm.waMessageId,
+              serializedMessage: bsm.serializedMessage,
+              createdAt: bsm.createdAt,
+            });
             baileysStoredMessagesCount++;
           } catch (err) {
             warnings.push(`Failed to import baileys stored message ${bsm.id}: ${err}`);
@@ -1090,10 +1053,12 @@ export class InfraController {
       if (data.tables.lidMappings?.length) {
         for (const lm of data.tables.lidMappings) {
           try {
-            await queryRunner.query(
-              `INSERT INTO lid_mappings (lid, phone, "sessionId", "updatedAt") VALUES ($1, $2, $3, $4)`,
-              [lm.lid, lm.phone ?? null, lm.sessionId ?? null, lm.updatedAt],
-            );
+            await trx('lid_mappings').insert({
+              lid: lm.lid,
+              phone: lm.phone ?? null,
+              sessionId: lm.sessionId ?? null,
+              updatedAt: lm.updatedAt,
+            });
             lidMappingsCount++;
           } catch (err) {
             warnings.push(`Failed to import lid mapping ${lm.lid}: ${err}`);
@@ -1116,7 +1081,7 @@ export class InfraController {
       // half-wiped DB and report success. A partial restore reported as imported:true was how
       // message history could silently vanish on a SQLite->Postgres migration.
       if (warnings.length > 0) {
-        await queryRunner.rollbackTransaction();
+        await trx.rollback();
         return { imported: false, counts, warnings };
       }
 
@@ -1124,7 +1089,7 @@ export class InfraController {
       // would silently WIPE the database and report success. Refuse it and roll back instead. (#488 review)
       const totalRestored = Object.values(counts).reduce((sum, n) => sum + n, 0);
       if (totalRestored === 0) {
-        await queryRunner.rollbackTransaction();
+        await trx.rollback();
         return {
           imported: false,
           counts,
@@ -1132,13 +1097,11 @@ export class InfraController {
         };
       }
 
-      await queryRunner.commitTransaction();
+      await trx.commit();
       return { imported: true, counts, warnings };
     } catch (error) {
-      await queryRunner.rollbackTransaction();
+      await trx.rollback();
       throw error;
-    } finally {
-      await queryRunner.release();
     }
   }
 
@@ -1147,7 +1110,7 @@ export class InfraController {
   // ============================================================================
 
   @Get('storage/files/count')
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Get file count in current storage' })
   @ApiResponse({ status: 200, description: 'File count and size' })
   async getStorageFileCount(): Promise<{
@@ -1166,7 +1129,7 @@ export class InfraController {
   }
 
   @Get('storage/export')
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Export all storage files as tar.gz' })
   @ApiResponse({ status: 200, description: 'Tar.gz archive stream' })
   async exportStorage(): Promise<{ message: string; download: string }> {
@@ -1206,7 +1169,7 @@ export class InfraController {
   }
 
   @Post('storage/import')
-  @RequireRole(ApiKeyRole.ADMIN)
+  @RequireRole(UserRole.ADMIN)
   @ApiOperation({ summary: 'Import storage files from tar.gz' })
   @ApiBody({ description: 'Path to tar.gz file to import' })
   @ApiResponse({ status: 200, description: 'Import result' })

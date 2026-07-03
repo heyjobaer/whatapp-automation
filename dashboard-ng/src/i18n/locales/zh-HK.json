@@ -54,7 +54,9 @@
     "refresh": "重新整理",
     "errorGeneric": "發生錯誤",
     "unknownError": "未知錯誤",
-    "retry": "重試"
+    "retry": "重試",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "theme": {
     "light": "淺色",
@@ -75,7 +77,8 @@
     "messageTester": "訊息測試器",
     "infrastructure": "基礎架構",
     "plugins": "外掛",
-    "logs": "記錄"
+    "logs": "記錄",
+    "users": "Users"
   },
   "chats": {
     "media": {
@@ -145,7 +148,15 @@
     "help": "需要協助？",
     "viewDocs": "查看文件",
     "footer": "由 Yudhi Armyndharis 及 OpenWA 社群用 ❤️ 打造",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in...",
+    "credentialsRequired": "Email and password are required",
+    "invalidCredentials": "Invalid email or password"
   },
   "dashboard": {
     "title": "控制面板",

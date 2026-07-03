@@ -3,7 +3,7 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
-import { TypeOrmModule } from '@nestjs/typeorm';
+import { DatabaseModule } from './database/database.module';
 import { ThrottlerModule } from '@nestjs/throttler';
 import configuration from './config/configuration';
 import { validateEnv } from './config/env.validation';
@@ -100,103 +100,10 @@ if (dashboardServingEnabled && dashboardBuildPresent) {
       validate: validateEnv,
     }),
 
-    // Main Database (always SQLite - boot config)
-    TypeOrmModule.forRootAsync({
-      name: 'main',
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
-        // Default ON for zero-config first boot. When disabled
-        // (MAIN_DATABASE_SYNCHRONIZE=false), the main-owned migrations create the
-        // api_keys/audit_logs schema instead — never both at once.
-        const synchronize = configService.get<boolean>('database.synchronize', true);
-        return {
-          name: 'main',
-          type: 'sqlite' as const,
-          database: configService.get<string>('database.database', './data/main.sqlite'),
-          entities: [
-            __dirname + '/modules/auth/**/*.entity{.ts,.js}',
-            __dirname + '/modules/audit/**/*.entity{.ts,.js}',
-          ],
-          // Dedicated migrations dir for the main connection only (must NOT run the
-          // data-connection migrations, which target session/webhook/message tables).
-          migrations: [__dirname + '/database/migrations-main/*{.ts,.js}'],
-          synchronize,
-          migrationsRun: !synchronize,
-          logging: configService.get<boolean>('database.logging', false),
-        };
-      },
-    }),
-
-    // Data Storage Database (pluggable - user data)
-    TypeOrmModule.forRootAsync({
-      name: 'data',
-      imports: [ConfigModule],
-      inject: [ConfigService],
-      useFactory: (configService: ConfigService) => {
-        const dbType = configService.get<'sqlite' | 'postgres'>('dataDatabase.type', 'sqlite');
-        const baseConfig = {
-          entities: [
-            __dirname + '/modules/session/**/*.entity{.ts,.js}',
-            __dirname + '/modules/webhook/**/*.entity{.ts,.js}',
-            __dirname + '/modules/message/**/*.entity{.ts,.js}',
-            __dirname + '/modules/template/**/*.entity{.ts,.js}',
-            __dirname + '/engine/**/*.entity{.ts,.js}',
-          ],
-          migrations: [__dirname + '/database/migrations/*{.ts,.js}'],
-          logging: configService.get<boolean>('dataDatabase.logging', false),
-        };
-
-        if (dbType === 'postgres') {
-          return {
-            ...baseConfig,
-            name: 'data',
-            type: 'postgres' as const,
-            host: configService.get<string>('dataDatabase.host'),
-            port: configService.get<number>('dataDatabase.port'),
-            username: configService.get<string>('dataDatabase.username'),
-            password: configService.get<string>('dataDatabase.password'),
-            database: configService.get<string>('dataDatabase.name', 'openwa'),
-
-            ssl: configService.get<boolean>('dataDatabase.ssl', false)
-              ? {
-                  rejectUnauthorized: configService.get<boolean>('dataDatabase.sslRejectUnauthorized', true),
-                }
-              : false,
-
-            // Never auto-sync Postgres in production; rely on migrations.
-            synchronize: configService.get<boolean>('dataDatabase.synchronize', false),
-            migrationsRun: true,
-            retryAttempts: 10,
-            retryDelay: 3000,
-            extra: {
-              max: configService.get<number>('dataDatabase.poolSize', 10),
-              // Runtime query/pool timeouts so a stuck query or saturated pool fails fast instead of
-              // hanging requests. statement_timeout bounds live runtime queries; the boot migrations
-              // (migrationsRun above) reset it to 0 per-transaction via SET LOCAL, so a long
-              // CREATE INDEX / backfill at boot is never aborted by it.
-              statement_timeout: configService.get<number>('dataDatabase.statementTimeoutMs', 30000),
-              idleTimeoutMillis: configService.get<number>('dataDatabase.idleTimeoutMs', 30000),
-              connectionTimeoutMillis: configService.get<number>('dataDatabase.connectionTimeoutMs', 10000),
-            },
-          };
-        }
-
-        // SQLite data DB: schema is MIGRATION-managed by default (DATABASE_SYNCHRONIZE unset/false),
-        // matching configuration.ts and .env.example ("Set false in production"). Set
-        // DATABASE_SYNCHRONIZE=true for zero-config synchronize instead. Computed once: the resolved
-        // value is always a boolean, so a get(..., true) fallback would never fire (and would be a trap).
-        const synchronize = configService.get<boolean>('dataDatabase.synchronize', false);
-        return {
-          ...baseConfig,
-          name: 'data',
-          type: 'sqlite' as const,
-          database: configService.get<string>('dataDatabase.database', './data/openwa.sqlite'),
-          synchronize,
-          migrationsRun: !synchronize,
-        };
-      },
-    }),
+    // Database — a single PostgreSQL connection (Knex) for ALL tables, including api_keys and
+    // audit_logs. Exposes the KNEX_CONNECTION token globally; pending migrations run automatically
+    // at boot unless DATABASE_AUTO_MIGRATE=false.
+    DatabaseModule,
 
     // Rate limiting
     ThrottlerModule.forRootAsync({

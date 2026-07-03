@@ -1,8 +1,10 @@
-import { Injectable, OnModuleInit } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable, OnModuleInit, Inject } from '@nestjs/common';
+import { Knex } from 'knex';
+import { KNEX_CONNECTION } from '../../database/database.module';
 import { LidMapping } from './lid-mapping.entity';
 import { createLogger } from '../../common/services/logger.service';
+
+const LID_MAPPINGS = 'lid_mappings';
 
 /**
  * Narrow read/write port over the `lid -> phone` table. The Baileys session store depends on this (sync
@@ -31,14 +33,11 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
   private readonly lidToPhone = new Map<string, string | null>();
   private readonly phoneToLids = new Map<string, Set<string>>();
 
-  constructor(
-    @InjectRepository(LidMapping, 'data')
-    private readonly repo: Repository<LidMapping>,
-  ) {}
+  constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
 
   async onModuleInit(): Promise<void> {
     try {
-      const rows = await this.repo.find();
+      const rows = (await this.knex(LID_MAPPINGS).select('*')) as LidMapping[];
       for (const row of rows) {
         this.index(row.lid, row.phone);
       }
@@ -65,7 +64,10 @@ export class LidMappingStoreService implements LidMappingStore, OnModuleInit {
     }
     this.index(lid, phone);
     try {
-      await this.repo.upsert({ lid, phone, sessionId: sessionId ?? null, updatedAt: new Date() }, ['lid']);
+      await this.knex(LID_MAPPINGS)
+        .insert({ lid, phone, sessionId: sessionId ?? null, updatedAt: new Date() })
+        .onConflict(['lid'])
+        .merge();
     } catch (err) {
       this.logger.warn(
         `Failed to persist lid->phone mapping for ${lid}: ${err instanceof Error ? err.message : String(err)}`,

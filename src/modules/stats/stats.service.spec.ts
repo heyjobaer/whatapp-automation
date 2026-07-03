@@ -1,4 +1,4 @@
-import { DataSource } from 'typeorm';
+import { DataSource } from '../../database/knex';
 import { StatsService, timeSeriesTimestampSql, hourBucketSql, maxCreatedAtSql } from './stats.service';
 import { Session, SessionStatus } from '../session/entities/session.entity';
 import { Message, MessageDirection, MessageStatus } from '../message/entities/message.entity';

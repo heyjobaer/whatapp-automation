@@ -1,7 +1,6 @@
-import { Injectable, OnApplicationBootstrap } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
-import { Message } from './entities/message.entity';
+import { Injectable, OnApplicationBootstrap, Inject } from '@nestjs/common';
+import { Knex } from 'knex';
+import { KNEX_CONNECTION } from '../../database/database.module';
 import { createLogger } from '../../common/services/logger.service';
 
 /**
@@ -23,10 +22,7 @@ import { createLogger } from '../../common/services/logger.service';
 export class MessageTypeBackfillService implements OnApplicationBootstrap {
   private readonly logger = createLogger('MessageTypeBackfill');
 
-  constructor(
-    @InjectRepository(Message, 'data')
-    private readonly messageRepository: Repository<Message>,
-  ) {}
+  constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
 
   async onApplicationBootstrap(): Promise<void> {
     // [legacy wwebjs token(s)] -> neutral MessageType. Kept in sync with mapWwebjsMessageType.
@@ -39,11 +35,10 @@ export class MessageTypeBackfillService implements OnApplicationBootstrap {
     let total = 0;
     try {
       for (const { from, to } of conversions) {
-        const result = await this.messageRepository.update(
-          { type: from.length === 1 ? from[0] : In(from) },
-          { type: to },
-        );
-        total += result.affected ?? 0;
+        const q = this.knex('messages');
+        from.length === 1 ? q.where('type', from[0]) : q.whereIn('type', from);
+        const affected = await q.update({ type: to });
+        total += affected ?? 0;
       }
       if (total > 0) {
         this.logger.log(`Backfilled ${total} legacy message type(s) to the neutral vocabulary`, {

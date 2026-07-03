@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { getRepositoryToken } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { getRepositoryToken } from '../../database/knex';
+import { Repository } from '../../database/knex';
 import { ConflictException, NotFoundException } from '@nestjs/common';
 import { TemplateService } from './template.service';
 import { Template } from './entities/template.entity';

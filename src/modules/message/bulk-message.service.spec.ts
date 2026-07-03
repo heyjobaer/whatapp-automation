@@ -1,6 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PayloadTooLargeException } from '@nestjs/common';
-import { getRepositoryToken } from '@nestjs/typeorm';
+import { getRepositoryToken } from '../../database/knex';
 import { BulkMessageService, resolveFinalBatchStatus, sanitizeBatchError } from './bulk-message.service';
 import { MessageBatch, BatchStatus } from './entities/message-batch.entity';
 import { MessageStatus } from './entities/message.entity';

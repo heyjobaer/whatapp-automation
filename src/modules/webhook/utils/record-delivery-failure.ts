@@ -1,5 +1,4 @@
-import { Repository } from 'typeorm';
-import { WebhookDeliveryFailure } from '../entities/webhook-delivery-failure.entity';
+import { Knex } from 'knex';
 
 export interface WebhookDeliveryFailureInput {
   webhookId: string;
@@ -31,12 +30,12 @@ export function statusCodeFromError(message: string): number | null {
  * re-poison) the delivery result or the fire-and-forget dispatch loop.
  */
 export async function recordWebhookDeliveryFailure(
-  repo: Repository<WebhookDeliveryFailure>,
+  db: Knex,
   logger: ErrorLogger,
   input: WebhookDeliveryFailureInput,
 ): Promise<void> {
   try {
-    await repo.insert({ ...input, lastStatusCode: input.lastStatusCode ?? null });
+    await db('webhook_delivery_failures').insert({ ...input, lastStatusCode: input.lastStatusCode ?? null });
   } catch (err) {
     logger.error(
       'Failed to persist webhook delivery-failure record',

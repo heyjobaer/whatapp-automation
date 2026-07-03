@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApiKeyRole } from '../../../modules/auth/entities/api-key.entity';
+import { UserRole } from '../../../modules/auth/entities/role.entity';
 import type { WebhookService } from '../../../modules/webhook/webhook.service';
 import { WebhookResponseDto } from '../../../modules/webhook/dto/webhook.dto';
 import type { ToolDescriptor } from '../tool-descriptor';
@@ -13,21 +13,21 @@ export function webhookTools(webhook: WebhookService): ToolDescriptor[] {
       description:
         'List all webhooks the API key is allowed to see, across all its accessible sessions. Supports limit/offset paging.',
       tier: 'read',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       inputSchema: z.object({
         limit: z.number().int().min(1).max(1000).optional(),
         offset: z.number().int().min(0).optional(),
       }),
-      handler: (input: { limit?: number; offset?: number }, apiKey) =>
+      handler: (input: { limit?: number; offset?: number }) =>
         webhook
-          .findAll(apiKey.allowedSessions, { limit: input.limit, offset: input.offset })
+          .findAll(null, { limit: input.limit, offset: input.offset })
           .then(ws => WebhookResponseDto.fromEntities(ws)),
     },
     {
       name: 'WebhookFindBySession',
       description: 'List all webhooks registered for a specific session.',
       tier: 'read',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({ sessionId }),
       handler: (input: { sessionId: string }) =>
@@ -37,7 +37,7 @@ export function webhookTools(webhook: WebhookService): ToolDescriptor[] {
       name: 'WebhookFindOne',
       description: 'Get details for a specific webhook by ID within a session.',
       tier: 'read',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,

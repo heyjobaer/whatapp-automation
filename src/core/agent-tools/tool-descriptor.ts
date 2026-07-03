@@ -1,6 +1,6 @@
 import type { z } from 'zod';
-import type { ApiKey } from '../../modules/auth/entities/api-key.entity';
-import type { ApiKeyRole } from '../../modules/auth/entities/api-key.entity';
+import type { AuthUser } from '../../modules/auth/entities/user.entity';
+import { UserRole } from '../../modules/auth/entities/role.entity';
 
 /** A single agent-invocable capability. Protocol-neutral: no MCP types here. */
 export interface ToolDescriptor<I = unknown> {
@@ -15,12 +15,12 @@ export interface ToolDescriptor<I = unknown> {
   destructive?: boolean;
   /** Safe to repeat without additional effect. Defaults to (tier === 'read'). */
   idempotent?: boolean;
-  /** Minimum role; checked via AuthService.hasPermission. */
-  requiredRole?: ApiKeyRole;
-  /** If true, input MUST carry `sessionId`, checked against the key's allowedSessions. */
+  /** Minimum role; checked via AuthService.hasRole. */
+  requiredRole?: UserRole;
+  /** If true, input MUST carry `sessionId`. */
   sessionScoped?: boolean;
   /** Result rendering hint for the MCP adapter. Default 'smart'. */
   resultDisposition?: 'json' | 'smart';
-  /** Calls the service. Receives validated input + the resolved, scoped key. */
-  handler: (input: I, apiKey: ApiKey) => Promise<unknown>;
+  /** Calls the service. Receives validated input + the authenticated user. */
+  handler: (input: I, user: AuthUser) => Promise<unknown>;
 }

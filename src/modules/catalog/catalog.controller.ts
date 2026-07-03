@@ -3,7 +3,7 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { CatalogService } from './catalog.service';
 import { SendProductDto, SendCatalogDto, ProductQueryDto } from './dto/send-product.dto';
 import { RequireRole } from '../auth/decorators/auth.decorators';
-import { ApiKeyRole } from '../auth/entities/api-key.entity';
+import { UserRole } from '../auth/entities/role.entity';
 
 @ApiTags('Catalog')
 @Controller('sessions/:sessionId')
@@ -29,14 +29,14 @@ export class CatalogController {
   }
 
   @Post('messages/send-product')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Send a product message' })
   async sendProduct(@Param('sessionId') sessionId: string, @Body() dto: SendProductDto) {
     return this.catalogService.sendProduct(sessionId, dto.chatId, dto.productId, dto.body);
   }
 
   @Post('messages/send-catalog')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Send catalog link' })
   async sendCatalog(@Param('sessionId') sessionId: string, @Body() dto: SendCatalogDto) {
     return this.catalogService.sendCatalog(sessionId, dto.chatId, dto.body);

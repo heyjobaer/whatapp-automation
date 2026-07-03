@@ -19,46 +19,27 @@ export default () => ({
     enabled: process.env.CACHE_ENABLED === 'true',
   },
 
-  // Main Database configuration (always SQLite for boot config)
+  // Database configuration — a SINGLE PostgreSQL database for ALL tables (sessions, messages,
+  // api_keys, audit_logs, …). SQLite support and the former main/data connection split are gone.
   database: {
-    type: 'sqlite' as const,
-    // SQLite file for the auth/audit DB. Overridable (e.g. e2e points it at a temp file) so tests
-    // never write api keys into the developer's ./data/main.sqlite.
-    database: process.env.MAIN_DATABASE_NAME || './data/main.sqlite',
-    // Schema management for the auth/audit DB. Default ON (zero-config first boot).
-    // Set MAIN_DATABASE_SYNCHRONIZE=false to manage schema via the main-owned migrations
-    // instead (migrationsRun then creates api_keys/audit_logs). When disabled, run the
-    // main-connection migrations explicitly with `npm run migration:run:main` (or
-    // `migration:run:main:prod` for the compiled image) — the plain `migration:run` only
-    // manages the data connection.
-    synchronize: process.env.MAIN_DATABASE_SYNCHRONIZE !== 'false',
-    logging: process.env.DATABASE_LOGGING === 'true',
-  },
-
-  // Data Storage Database configuration (pluggable: SQLite, PostgreSQL, etc.)
-  dataDatabase: {
-    type: process.env.DATABASE_TYPE || 'sqlite',
-    // SQLite path (used when type is sqlite)
-    database: process.env.DATABASE_NAME || './data/openwa.sqlite',
-    // Postgres database NAME (used when type is postgres). Resolved from the same
-    // DATABASE_NAME env as the migration CLI (data-source.ts) so the runtime factory and
-    // migrations never target different databases. Distinct sqlite-vs-pg defaults.
-    name: process.env.DATABASE_NAME || 'openwa',
-    // PostgreSQL/MySQL connection (used when type is postgres/mysql)
+    type: 'postgres' as const,
+    // Postgres connection (these knobs are also read by src/database/database.module.ts / the CLI knexfile).
     host: process.env.DATABASE_HOST || 'localhost',
     port: parseInt(process.env.DATABASE_PORT || '5432', 10),
     username: process.env.DATABASE_USERNAME,
     password: process.env.DATABASE_PASSWORD,
-    synchronize: process.env.DATABASE_SYNCHRONIZE === 'true',
+    name: process.env.DATABASE_NAME || 'openwa',
     logging: process.env.DATABASE_LOGGING === 'true',
-    // Connection pooling (PostgreSQL)
+    // Run pending Knex migrations automatically at boot (zero-config first run). Set
+    // DATABASE_AUTO_MIGRATE=false to manage schema out-of-band via `npm run migrate` / `migrate:prod`.
+    autoMigrate: process.env.DATABASE_AUTO_MIGRATE !== 'false',
+    // Connection pooling.
     poolSize: parseInt(process.env.DATABASE_POOL_SIZE || '10', 10),
-    // Pool/query timeouts (PostgreSQL). statement_timeout is server-side per query; idle/connection
-    // are pool-side. Set any to 0 to disable. Applied to the runtime connection only (see app.module).
+    // Pool/query timeouts. statement_timeout is server-side per query; idle/connection are pool-side.
     statementTimeoutMs: parseInt(process.env.DATABASE_STATEMENT_TIMEOUT_MS || '30000', 10),
     idleTimeoutMs: parseInt(process.env.DATABASE_IDLE_TIMEOUT_MS || '30000', 10),
     connectionTimeoutMs: parseInt(process.env.DATABASE_CONNECTION_TIMEOUT_MS || '10000', 10),
-    // SSL configuration
+    // SSL configuration.
     ssl: process.env.DATABASE_SSL === 'true',
     sslRejectUnauthorized: process.env.DATABASE_SSL_REJECT_UNAUTHORIZED !== 'false',
   },
@@ -111,6 +92,14 @@ export default () => ({
       longTtl: parseInt(process.env.RATE_LIMIT_LONG_TTL || '3600000', 10),
       longLimit: parseInt(process.env.RATE_LIMIT_LONG_LIMIT || '1000', 10),
     },
+  },
+
+  // Authentication (email + password, JWT)
+  auth: {
+    // Secret used to sign/verify JWTs. MUST be set to a strong random value in production.
+    jwtSecret: process.env.JWT_SECRET,
+    // Token lifetime (e.g. "7d", "12h", "3600s").
+    jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
   },
 
   // Security configuration

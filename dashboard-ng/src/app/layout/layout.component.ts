@@ -10,17 +10,18 @@ import { ThemeService, type Theme } from '../core/theme.service';
 import { APP_VERSION } from '../core/version';
 
 const ALL_NAV_ITEMS = [
-  { to: '/', icon: 'layout-dashboard', key: 'dashboard', adminOnly: false },
-  { to: '/sessions', icon: 'smartphone', key: 'sessions', adminOnly: false },
-  { to: '/chats', icon: 'message-square', key: 'chats', adminOnly: false },
-  { to: '/webhooks', icon: 'webhook', key: 'webhooks', adminOnly: false },
-  { to: '/templates', icon: 'clipboard-list', key: 'templates', adminOnly: false },
-  { to: '/api-keys', icon: 'key', key: 'apiKeys', adminOnly: true },
-  { to: '/message-tester', icon: 'send', key: 'messageTester', adminOnly: false },
+  { to: '/', icon: 'layout-dashboard', key: 'dashboard', adminOnly: false, superAdminOnly: false },
+  { to: '/sessions', icon: 'smartphone', key: 'sessions', adminOnly: false, superAdminOnly: false },
+  { to: '/chats', icon: 'message-square', key: 'chats', adminOnly: false, superAdminOnly: false },
+  { to: '/webhooks', icon: 'webhook', key: 'webhooks', adminOnly: false, superAdminOnly: false },
+  { to: '/templates', icon: 'clipboard-list', key: 'templates', adminOnly: false, superAdminOnly: false },
+  // User & role management is SUPER_ADMIN-only.
+  { to: '/users', icon: 'users', key: 'users', adminOnly: false, superAdminOnly: true },
+  { to: '/message-tester', icon: 'send', key: 'messageTester', adminOnly: false, superAdminOnly: false },
   // Backend /infra/* is ADMIN-only; hide the nav item from non-admins (UX + defense-in-depth).
-  { to: '/infrastructure', icon: 'server', key: 'infrastructure', adminOnly: true },
+  { to: '/infrastructure', icon: 'server', key: 'infrastructure', adminOnly: true, superAdminOnly: false },
   // Plugins section disabled (kept out of the port; core plugin loader still runs the WA engines).
-  { to: '/logs', icon: 'file-text', key: 'logs', adminOnly: false },
+  { to: '/logs', icon: 'file-text', key: 'logs', adminOnly: false, superAdminOnly: false },
 ] as const;
 
 const THEME_MODES: Theme[] = ['light', 'dark', 'system'];
@@ -52,7 +53,11 @@ export class LayoutComponent implements OnInit {
   // backend so a stale-built bundle can't display the wrong number. Falls back silently on error.
   readonly version = signal(APP_VERSION);
 
-  readonly navItems = computed(() => ALL_NAV_ITEMS.filter(item => !item.adminOnly || this.auth.isAdmin()));
+  readonly navItems = computed(() =>
+    ALL_NAV_ITEMS.filter(
+      item => (!item.adminOnly || this.auth.isAdmin()) && (!item.superAdminOnly || this.auth.isSuperAdmin()),
+    ),
+  );
   readonly activePalette = computed(
     () => this.theme.paletteOptions.find(option => option.value === this.theme.palette()) ?? this.theme.paletteOptions[0],
   );

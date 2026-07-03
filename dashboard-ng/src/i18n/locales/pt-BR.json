@@ -54,7 +54,9 @@
     "unknownError": "Erro desconhecido",
     "showApiKey": "Mostrar chave API",
     "hideApiKey": "Ocultar chave API",
-    "retry": "Tentar novamente"
+    "retry": "Tentar novamente",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password"
   },
   "theme": {
     "light": "Claro",
@@ -75,7 +77,8 @@
     "infrastructure": "Infraestrutura",
     "plugins": "Plugins",
     "logs": "Registros",
-    "templates": "Modelos"
+    "templates": "Modelos",
+    "users": "Users"
   },
   "chats": {
     "media": {
@@ -145,7 +148,15 @@
     "help": "Precisa de ajuda?",
     "viewDocs": "Ver documentação",
     "footer": "Feito com ❤️ por Yudhi Armyndharis e a comunidade OpenWA",
-    "version": "v{{version}} · {{date}}"
+    "version": "v{{version}} · {{date}}",
+    "email": "Email",
+    "emailPlaceholder": "you@example.com",
+    "password": "Password",
+    "passwordPlaceholder": "Enter your password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in...",
+    "credentialsRequired": "Email and password are required",
+    "invalidCredentials": "Invalid email or password"
   },
   "dashboard": {
     "title": "Painel",

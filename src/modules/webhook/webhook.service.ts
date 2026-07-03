@@ -1,6 +1,7 @@
-import { Injectable, NotFoundException, Optional, BadRequestException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { FindManyOptions, In, Repository } from 'typeorm';
+import { Inject, Injectable, NotFoundException, Optional, BadRequestException } from '@nestjs/common';
+import { Knex } from 'knex';
+import { KNEX_CONNECTION } from '../../database/database.module';
+import { jsonb } from '../../database/pg.util';
 import { ConfigService } from '@nestjs/config';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
@@ -50,10 +51,7 @@ export class WebhookService {
   private readonly queueEnabled: boolean;
 
   constructor(
-    @InjectRepository(Webhook, 'data')
-    private readonly webhookRepository: Repository<Webhook>,
-    @InjectRepository(WebhookDeliveryFailure, 'data')
-    private readonly failureRepository: Repository<WebhookDeliveryFailure>,
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
     private readonly configService: ConfigService,
     private readonly hookManager: HookManager,
     @Optional()
@@ -84,35 +82,34 @@ export class WebhookService {
 
   async create(sessionId: string, dto: CreateWebhookDto): Promise<Webhook> {
     await this.validateWebhookUrl(dto.url);
-    const webhook = this.webhookRepository.create({
-      sessionId,
-      url: dto.url,
-      events: dto.events || ['message.received'],
-      secret: dto.secret || null,
-      headers: dto.headers || {},
-      filters: dto.filters ?? null,
-      retryCount: dto.retryCount ?? 3,
-    });
+    const [row] = await this.knex('webhooks')
+      .insert({
+        sessionId,
+        url: dto.url,
+        events: jsonb(dto.events || ['message.received']),
+        secret: dto.secret || null,
+        headers: jsonb(dto.headers || {}),
+        filters: jsonb(dto.filters ?? null),
+        retryCount: dto.retryCount ?? 3,
+      })
+      .returning('*');
 
-    return this.webhookRepository.save(webhook);
+    return row as Webhook;
   }
 
   async findBySession(sessionId: string): Promise<Webhook[]> {
-    return this.webhookRepository.find({
-      where: { sessionId },
-      order: { createdAt: 'DESC' },
-    });
+    return this.knex('webhooks').where({ sessionId }).orderBy('createdAt', 'desc') as Promise<Webhook[]>;
   }
 
   async findAll(allowedSessions?: string[] | null, opts: ListOptions = {}): Promise<Webhook[]> {
     // A session-restricted key only sees its own sessions' webhooks; an unrestricted key
     // (null/empty allowlist, e.g. ADMIN) sees all — mirroring the ApiKeyGuard allowedSessions model.
     const { limit, offset } = resolveListWindow(opts.limit, opts.offset);
-    const options: FindManyOptions<Webhook> = { order: { createdAt: 'DESC' }, take: limit, skip: offset };
+    const query = this.knex('webhooks').orderBy('createdAt', 'desc').limit(limit).offset(offset);
     if (allowedSessions && allowedSessions.length > 0) {
-      options.where = { sessionId: In(allowedSessions) };
+      query.whereIn('sessionId', allowedSessions);
     }
-    return this.webhookRepository.find(options);
+    return query as Promise<Webhook[]>;
   }
 
   /**
@@ -122,18 +119,17 @@ export class WebhookService {
    */
   async listDeliveryFailures(opts: ListOptions & { sessionId?: string } = {}): Promise<WebhookDeliveryFailure[]> {
     const { limit, offset } = resolveListWindow(opts.limit, opts.offset);
-    return this.failureRepository.find({
-      where: opts.sessionId ? { sessionId: opts.sessionId } : {},
-      order: { createdAt: 'DESC' },
-      take: limit,
-      skip: offset,
-    });
+    const query = this.knex('webhook_delivery_failures').orderBy('createdAt', 'desc').limit(limit).offset(offset);
+    if (opts.sessionId) {
+      query.where({ sessionId: opts.sessionId });
+    }
+    return query as Promise<WebhookDeliveryFailure[]>;
   }
 
   async findOne(sessionId: string, id: string): Promise<Webhook> {
     // Scope by the URL's sessionId so one session cannot read/act on another's webhook by id.
     // A wrong-session id resolves to not-found (no cross-session existence oracle).
-    const webhook = await this.webhookRepository.findOne({ where: { id, sessionId } });
+    const webhook = (await this.knex('webhooks').where({ id, sessionId }).first()) as Webhook | undefined;
     if (!webhook) {
       throw new NotFoundException(`Webhook with id '${id}' not found`);
     }
@@ -141,27 +137,32 @@ export class WebhookService {
   }
 
   async update(sessionId: string, id: string, dto: UpdateWebhookDto): Promise<Webhook> {
-    const webhook = await this.findOne(sessionId, id);
+    await this.findOne(sessionId, id); // 404 if missing (scoped by session)
 
+    const patch: Record<string, unknown> = {};
     if (dto.url !== undefined) {
       await this.validateWebhookUrl(dto.url);
-      webhook.url = dto.url;
+      patch.url = dto.url;
     }
-    if (dto.events !== undefined) webhook.events = dto.events;
+    if (dto.events !== undefined) patch.events = jsonb(dto.events);
     // Normalize empty string to null (parity with create) — an empty secret means "no HMAC",
     // not a stored blank that silently disables signing while looking configured.
-    if (dto.secret !== undefined) webhook.secret = dto.secret || null;
-    if (dto.headers !== undefined) webhook.headers = dto.headers;
-    if (dto.filters !== undefined) webhook.filters = dto.filters;
-    if (dto.active !== undefined) webhook.active = dto.active;
-    if (dto.retryCount !== undefined) webhook.retryCount = dto.retryCount;
+    if (dto.secret !== undefined) patch.secret = dto.secret || null;
+    if (dto.headers !== undefined) patch.headers = jsonb(dto.headers);
+    if (dto.filters !== undefined) patch.filters = jsonb(dto.filters);
+    if (dto.active !== undefined) patch.active = dto.active;
+    if (dto.retryCount !== undefined) patch.retryCount = dto.retryCount;
 
-    return this.webhookRepository.save(webhook);
+    const [row] = await this.knex('webhooks')
+      .where({ id })
+      .update({ ...patch, updatedAt: this.knex.fn.now() })
+      .returning('*');
+    return row as Webhook;
   }
 
   async delete(sessionId: string, id: string): Promise<void> {
-    const webhook = await this.findOne(sessionId, id);
-    await this.webhookRepository.remove(webhook);
+    await this.findOne(sessionId, id);
+    await this.knex('webhooks').where({ id }).del();
   }
 
   async test(sessionId: string, webhookId: string): Promise<{ success: boolean; statusCode?: number; error?: string }> {
@@ -222,9 +223,7 @@ export class WebhookService {
     // logged and swallowed here — otherwise it surfaces as an unhandled promise rejection.
     let webhooks: Webhook[];
     try {
-      webhooks = await this.webhookRepository.find({
-        where: { sessionId, active: true },
-      });
+      webhooks = (await this.knex('webhooks').where({ sessionId, active: true })) as Webhook[];
     } catch (error) {
       this.logger.error(`Webhook dispatch lookup failed for ${event}`, String(error), {
         sessionId,
@@ -469,9 +468,9 @@ export class WebhookService {
       }
 
       // Update last triggered timestamp
-      await this.webhookRepository.update(webhook.id, {
-        lastTriggeredAt: new Date(),
-      });
+      await this.knex('webhooks')
+        .where({ id: webhook.id })
+        .update({ lastTriggeredAt: new Date(), updatedAt: this.knex.fn.now() });
 
       this.logger.debug(`Webhook delivered to ${webhook.id}`, {
         webhookId: webhook.id,
@@ -494,7 +493,7 @@ export class WebhookService {
       // All direct-path retries exhausted — persist a durable failure record before giving up, mirroring
       // the queued processor's final-attempt path so the queue-disabled path isn't a blind spot.
       const errMessage = error instanceof Error ? error.message : String(error);
-      await recordWebhookDeliveryFailure(this.failureRepository, this.logger, {
+      await recordWebhookDeliveryFailure(this.knex, this.logger, {
         webhookId: webhook.id,
         sessionId: payload.sessionId,
         event: payload.event,

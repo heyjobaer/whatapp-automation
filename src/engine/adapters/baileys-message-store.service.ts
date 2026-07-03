@@ -1,11 +1,13 @@
-import { Injectable } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Injectable, Inject } from '@nestjs/common';
+import { Knex } from 'knex';
+import { KNEX_CONNECTION } from '../../database/database.module';
 import type * as BaileysLib from '@whiskeysockets/baileys';
 import type { WAMessage } from '@whiskeysockets/baileys';
 import { BaileysStoredMessage } from './baileys-stored-message.entity';
 import { BaileysMessageStore } from '../types/baileys.types';
 import { createLogger } from '../../common/services/logger.service';
+
+const BAILEYS_STORED_MESSAGES = 'baileys_stored_messages';
 
 function positiveIntFromEnv(name: string, fallback: number): number {
   const parsed = Number.parseInt(process.env[name] ?? '', 10);
@@ -44,10 +46,7 @@ export class BaileysMessageStoreService implements BaileysMessageStore {
     return (this.baileysLib ??= await import('@whiskeysockets/baileys'));
   }
 
-  constructor(
-    @InjectRepository(BaileysStoredMessage, 'data')
-    private readonly repo: Repository<BaileysStoredMessage>,
-  ) {}
+  constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
 
   async put(sessionId: string, msg: WAMessage): Promise<void> {
     const waMessageId = msg.key?.id;
@@ -63,10 +62,10 @@ export class BaileysMessageStoreService implements BaileysMessageStore {
     // string-compares '…:11' < '…:11.000' = TRUE, causing every same-second row to be over-evicted
     // and the store to be wiped to ~0.
     try {
-      await this.repo.upsert({ sessionId, waMessageId, serializedMessage, createdAt: new Date() }, [
-        'sessionId',
-        'waMessageId',
-      ]);
+      await this.knex(BAILEYS_STORED_MESSAGES)
+        .insert({ sessionId, waMessageId, serializedMessage, createdAt: new Date() })
+        .onConflict(['sessionId', 'waMessageId'])
+        .merge();
     } catch (err) {
       if (isMissingParentSessionError(err)) {
         // Orphaned adapter: the sessions row was deleted/recreated (reconnect churn) while this
@@ -88,7 +87,9 @@ export class BaileysMessageStoreService implements BaileysMessageStore {
   }
 
   async getMessage(sessionId: string, messageId: string): Promise<WAMessage | null> {
-    const row = await this.repo.findOne({ where: { sessionId, waMessageId: messageId } });
+    const row = (await this.knex(BAILEYS_STORED_MESSAGES)
+      .where({ sessionId, waMessageId: messageId })
+      .first()) as BaileysStoredMessage | undefined;
     if (!row) {
       return null;
     }
@@ -97,28 +98,32 @@ export class BaileysMessageStoreService implements BaileysMessageStore {
   }
 
   async clearSession(sessionId: string): Promise<void> {
-    await this.repo.delete({ sessionId });
+    await this.knex(BAILEYS_STORED_MESSAGES).where({ sessionId }).del();
   }
 
   /** Per-session row cap: keep the newest N, delete the rest. Deterministic via (createdAt, id). */
   private async enforceLimit(sessionId: string): Promise<void> {
     const limit = positiveIntFromEnv('BAILEYS_MESSAGE_STORE_LIMIT', 5000);
-    const cutoff = await this.repo.find({
-      where: { sessionId },
-      order: { createdAt: 'DESC', id: 'DESC' },
-      skip: limit,
-      take: 1,
-      select: ['id', 'createdAt'],
-    });
+    const cutoff = (await this.knex(BAILEYS_STORED_MESSAGES)
+      .where('sessionId', sessionId)
+      .orderBy([
+        { column: 'createdAt', order: 'desc' },
+        { column: 'id', order: 'desc' },
+      ])
+      .offset(limit)
+      .limit(1)
+      .select('id', 'createdAt')) as Pick<BaileysStoredMessage, 'id' | 'createdAt'>[];
     if (cutoff.length === 0) {
       return; // under the cap — nothing to evict
     }
     const { id, createdAt } = cutoff[0];
-    await this.repo
-      .createQueryBuilder()
-      .delete()
-      .where('sessionId = :sessionId', { sessionId })
-      .andWhere('(createdAt < :createdAt OR (createdAt = :createdAt AND id <= :id))', { createdAt, id })
-      .execute();
+    await this.knex(BAILEYS_STORED_MESSAGES)
+      .where('sessionId', sessionId)
+      .andWhere(builder => {
+        builder
+          .where('createdAt', '<', createdAt as unknown as Date)
+          .orWhere(sub => sub.where('createdAt', createdAt as unknown as Date).andWhere('id', '<=', id as string));
+      })
+      .del();
   }
 }

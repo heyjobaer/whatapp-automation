@@ -1,15 +1,16 @@
-import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, LessThan } from 'typeorm';
+import { Injectable, OnModuleInit, OnModuleDestroy, Inject } from '@nestjs/common';
+import { Knex } from 'knex';
+import { KNEX_CONNECTION } from '../../database/database.module';
+import { jsonb } from '../../database/pg.util';
 import { AuditLog, AuditAction, AuditSeverity } from './entities/audit-log.entity';
-import { ApiKey } from '../auth/entities/api-key.entity';
+import { AuthUser } from '../auth/entities/user.entity';
 import { createLogger } from '../../common/services/logger.service';
 
 /** Upper bound on a single audit-log page, so a large `limit` can't load the whole table at once. */
 export const MAX_AUDIT_PAGE_SIZE = 200;
 
 interface AuditContext {
-  apiKey?: ApiKey;
+  user?: Pick<AuthUser, 'id' | 'email'>;
   sessionId?: string;
   sessionName?: string;
   ipAddress?: string;
@@ -23,7 +24,7 @@ interface AuditContext {
 
 export interface AuditQueryOptions {
   action?: AuditAction;
-  apiKeyId?: string;
+  userId?: string;
   sessionId?: string;
   severity?: AuditSeverity;
   startDate?: Date;
@@ -37,10 +38,7 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = createLogger('AuditService');
   private cleanupTimer?: ReturnType<typeof setInterval>;
 
-  constructor(
-    @InjectRepository(AuditLog, 'main')
-    private readonly auditRepository: Repository<AuditLog>,
-  ) {}
+  constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
 
   /**
    * Periodically prune audit logs older than AUDIT_RETENTION_DAYS (default 90; set <= 0 to disable).
@@ -77,26 +75,27 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
     context: AuditContext = {},
     severity: AuditSeverity = AuditSeverity.INFO,
   ): Promise<AuditLog | null> {
-    const auditLog = this.auditRepository.create({
-      action,
-      severity,
-      apiKeyId: context.apiKey?.id || null,
-      apiKeyName: context.apiKey?.name || null,
-      sessionId: context.sessionId || null,
-      sessionName: context.sessionName || null,
-      ipAddress: context.ipAddress || null,
-      userAgent: context.userAgent || null,
-      method: context.method || null,
-      path: context.path || null,
-      statusCode: context.statusCode || null,
-      metadata: context.metadata || null,
-      errorMessage: context.errorMessage || null,
-    });
-
     // Audit logging is best-effort: a failed insert must never turn a succeeded operation into a 500
     // (callers await this after the primary side-effect). Log and swallow.
     try {
-      return await this.auditRepository.save(auditLog);
+      const [row] = await this.knex('audit_logs')
+        .insert({
+          action,
+          severity,
+          userId: context.user?.id || null,
+          userEmail: context.user?.email || null,
+          sessionId: context.sessionId || null,
+          sessionName: context.sessionName || null,
+          ipAddress: context.ipAddress || null,
+          userAgent: context.userAgent || null,
+          method: context.method || null,
+          path: context.path || null,
+          statusCode: context.statusCode || null,
+          metadata: jsonb(context.metadata || null),
+          errorMessage: context.errorMessage || null,
+        })
+        .returning('*');
+      return row as AuditLog;
     } catch (error) {
       this.logger.error(
         `Failed to write audit log for ${String(action)}`,
@@ -126,54 +125,51 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
     const where: Record<string, unknown> = {};
 
     if (options.action) where.action = options.action;
-    if (options.apiKeyId) where.apiKeyId = options.apiKeyId;
+    if (options.userId) where.userId = options.userId;
     if (options.sessionId) where.sessionId = options.sessionId;
     if (options.severity) where.severity = options.severity;
-
-    if (options.startDate && options.endDate) {
-      where.createdAt = Between(options.startDate, options.endDate);
-    }
 
     // Clamp the page size so an arbitrarily large `limit` can't load the whole table into one response.
     const requested = options.limit && options.limit > 0 ? options.limit : 50;
     const take = Math.min(requested, MAX_AUDIT_PAGE_SIZE);
+    // Clamp to a non-negative skip: a negative offset (e.g. from an unvalidated `?offset=-5`) would
+    // otherwise reach the query driver verbatim.
+    const skip = options.offset && options.offset > 0 ? options.offset : 0;
 
-    const [data, total] = await this.auditRepository.findAndCount({
-      where,
-      order: { createdAt: 'DESC' },
-      take,
-      // Clamp to a non-negative skip: a negative offset (e.g. from an unvalidated `?offset=-5`) would
-      // otherwise reach the query driver verbatim.
-      skip: options.offset && options.offset > 0 ? options.offset : 0,
-    });
+    const dataQuery = this.knex('audit_logs').where(where).orderBy('createdAt', 'desc').limit(take).offset(skip);
+    const countQuery = this.knex('audit_logs').where(where).count<{ count: string }[]>('* as count');
 
-    return { data, total };
+    if (options.startDate && options.endDate) {
+      dataQuery.andWhereBetween('createdAt', [options.startDate, options.endDate]);
+      countQuery.andWhereBetween('createdAt', [options.startDate, options.endDate]);
+    }
+
+    const data = (await dataQuery) as AuditLog[];
+    const [{ count }] = await countQuery;
+
+    return { data, total: Number(count) };
   }
 
-  async getRecentByApiKey(apiKeyId: string, limit = 10): Promise<AuditLog[]> {
-    return this.auditRepository.find({
-      where: { apiKeyId },
-      order: { createdAt: 'DESC' },
-      take: limit,
-    });
+  async getRecentByUser(userId: string, limit = 10): Promise<AuditLog[]> {
+    return this.knex('audit_logs')
+      .where({ userId })
+      .orderBy('createdAt', 'desc')
+      .limit(limit) as Promise<AuditLog[]>;
   }
 
   async getRecentBySession(sessionId: string, limit = 10): Promise<AuditLog[]> {
-    return this.auditRepository.find({
-      where: { sessionId },
-      order: { createdAt: 'DESC' },
-      take: limit,
-    });
+    return this.knex('audit_logs')
+      .where({ sessionId })
+      .orderBy('createdAt', 'desc')
+      .limit(limit) as Promise<AuditLog[]>;
   }
 
   async cleanup(olderThanDays = 30): Promise<number> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - olderThanDays);
 
-    const result = await this.auditRepository.delete({
-      createdAt: LessThan(cutoffDate),
-    });
+    const affected = await this.knex('audit_logs').where('createdAt', '<', cutoffDate).del();
 
-    return result.affected || 0;
+    return affected || 0;
   }
 }

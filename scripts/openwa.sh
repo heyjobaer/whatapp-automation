@@ -40,14 +40,13 @@ get_profiles() {
     # Dashboard is bundled into the openwa-api image and served by NestJS on the API port —
     # no separate container/profile needed. Put your own TLS proxy in front if required.
 
-    # PostgreSQL (built-in)
-    if [ "${DATABASE_TYPE:-sqlite}" = "postgres" ] && [ "${POSTGRES_BUILTIN:-false}" = "true" ]; then
-        profiles="$profiles --profile postgres"
-        log_info "PostgreSQL: built-in container"
-    elif [ "${DATABASE_TYPE:-sqlite}" = "postgres" ]; then
-        log_info "PostgreSQL: external (${DATABASE_HOST:-localhost}:${DATABASE_PORT:-5432})"
+    # PostgreSQL is the single, required database. The built-in `postgres` service is no longer
+    # profile-gated (it always starts with the stack); use an external Postgres by pointing
+    # DATABASE_HOST at it (leave it as `postgres`/unset to use the bundled container).
+    if [ -n "${DATABASE_HOST:-}" ] && [ "${DATABASE_HOST}" != "postgres" ]; then
+        log_info "PostgreSQL: external (${DATABASE_HOST}:${DATABASE_PORT:-5432})"
     else
-        log_info "Database: SQLite"
+        log_info "PostgreSQL: built-in container"
     fi
 
     # Redis (built-in)

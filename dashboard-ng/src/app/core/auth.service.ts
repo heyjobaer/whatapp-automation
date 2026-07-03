@@ -1,69 +1,85 @@
 import { Injectable, computed, signal } from '@angular/core';
-import { API_BASE_URL, API_KEY_STORAGE_KEY } from './api.service';
+import { API_BASE_URL, TOKEN_STORAGE_KEY } from './api.service';
+import type { UserRole, LoginResponse, User } from './api.types';
 
-export type UserRole = 'admin' | 'operator' | 'viewer';
-
-const ROLE_STORAGE_KEY = 'openwa_user_role';
+const USER_STORAGE_KEY = 'openwa_user';
 
 /**
- * API-key auth + role state (port of the React App.tsx auth flow + useRole context).
- * The key lives in sessionStorage (per-tab), the role in localStorage — same as the original.
+ * Email + password (JWT) auth + role state.
+ * The token lives in sessionStorage (per-tab); the authenticated user (incl. role) in localStorage.
+ * Roles: SUPER_ADMIN > ADMIN > READONLY.
  */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
-  private readonly _role = signal<UserRole | null>((localStorage.getItem(ROLE_STORAGE_KEY) as UserRole) || null);
-  private readonly _isAuthenticated = signal<boolean>(!!sessionStorage.getItem(API_KEY_STORAGE_KEY));
+  private readonly _user = signal<LoginResponse['user'] | null>(this.readStoredUser());
+  private readonly _isAuthenticated = signal<boolean>(!!sessionStorage.getItem(TOKEN_STORAGE_KEY));
 
-  readonly role = this._role.asReadonly();
+  readonly user = this._user.asReadonly();
+  readonly role = computed<UserRole | null>(() => this._user()?.role ?? null);
   readonly isAuthenticated = this._isAuthenticated.asReadonly();
-  readonly isAdmin = computed(() => this._role() === 'admin');
-  readonly canWrite = computed(() => this._role() === 'admin' || this._role() === 'operator');
+  readonly isSuperAdmin = computed(() => this._user()?.role === 'SUPER_ADMIN');
+  readonly isAdmin = computed(() => this._user()?.role === 'SUPER_ADMIN' || this._user()?.role === 'ADMIN');
+  // READONLY can only read; ADMIN and SUPER_ADMIN can write.
+  readonly canWrite = this.isAdmin;
 
-  /** Validate the key against the backend; on success store it and resolve the role. */
-  async login(apiKey: string): Promise<{ ok: boolean; message?: string }> {
-    const response = await fetch(`${API_BASE_URL}/auth/validate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-API-Key': apiKey },
-    });
+  /** Authenticate with email + password; on success store the JWT + user and resolve the role. */
+  async login(email: string, password: string): Promise<{ ok: boolean; message?: string }> {
+    let response: Response;
+    try {
+      response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+    } catch {
+      return { ok: false, message: 'connection' };
+    }
     if (!response.ok) {
       const errorData = (await response.json().catch(() => ({}))) as { message?: string };
       return { ok: false, message: errorData.message };
     }
-    sessionStorage.setItem(API_KEY_STORAGE_KEY, apiKey);
-    const data = (await response.json().catch(() => ({}))) as { role?: UserRole };
-    this.setRole(data.role ?? 'viewer');
+    const data = (await response.json()) as LoginResponse;
+    sessionStorage.setItem(TOKEN_STORAGE_KEY, data.token);
+    this.setUser(data.user);
     this._isAuthenticated.set(true);
     return { ok: true };
   }
 
-  /** Re-validate a stored key on app start to refresh the role (keeps existing role on failure). */
+  /** Refresh the stored user (role/name) from the backend on app start. Keeps state on failure. */
   async revalidate(): Promise<void> {
-    const apiKey = sessionStorage.getItem(API_KEY_STORAGE_KEY);
-    if (!apiKey) return;
+    const token = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    if (!token) return;
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/validate`, {
-        method: 'POST',
-        headers: { 'X-API-Key': apiKey },
-      });
-      const data = (await response.json()) as { valid?: boolean; role?: UserRole };
-      if (data.valid && data.role) this.setRole(data.role);
+      const response = await fetch(`${API_BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
+      if (!response.ok) return;
+      const me = (await response.json()) as User;
+      this.setUser({ id: me.id, email: me.email, name: me.name, role: me.role });
     } catch {
-      // Keep the existing role from localStorage if validation fails.
+      // Keep the existing stored user if the refresh fails.
     }
   }
 
   logout(): void {
-    sessionStorage.removeItem(API_KEY_STORAGE_KEY);
-    this.setRole(null);
+    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    this.setUser(null);
     this._isAuthenticated.set(false);
   }
 
-  private setRole(role: UserRole | null): void {
-    this._role.set(role);
-    if (role) {
-      localStorage.setItem(ROLE_STORAGE_KEY, role);
+  private setUser(user: LoginResponse['user'] | null): void {
+    this._user.set(user);
+    if (user) {
+      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
     } else {
-      localStorage.removeItem(ROLE_STORAGE_KEY);
+      localStorage.removeItem(USER_STORAGE_KEY);
+    }
+  }
+
+  private readStoredUser(): LoginResponse['user'] | null {
+    try {
+      const raw = localStorage.getItem(USER_STORAGE_KEY);
+      return raw ? (JSON.parse(raw) as LoginResponse['user']) : null;
+    } catch {
+      return null;
     }
   }
 }

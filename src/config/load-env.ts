@@ -31,8 +31,8 @@ export function loadEnvironment(): void {
   }
 
   // Tighten any pre-existing secret files written before per-file 0600 perms (best-effort) — the
-  // generated .env holds S3/DB/Redis secrets and .api-key holds the raw admin key.
-  for (const secret of [generatedEnvPath, path.resolve(dataDir, '.api-key')]) {
+  // generated .env holds S3/DB/Redis secrets and .admin-credentials holds the seeded admin password.
+  for (const secret of [generatedEnvPath, path.resolve(dataDir, '.admin-credentials')]) {
     if (fs.existsSync(secret)) {
       try {
         fs.chmodSync(secret, 0o600);
@@ -67,9 +67,11 @@ export function loadEnvironment(): void {
 # Edit via Dashboard > Infrastructure or modify this file directly.
 # Note: values in process env or project .env take precedence over this file.
 
-# Database (SQLite - no external service required)
-DATABASE_TYPE=sqlite
-POSTGRES_BUILTIN=false
+# Database (PostgreSQL — the single database for all data; SQLite is no longer supported).
+# Set DATABASE_HOST / DATABASE_USERNAME / DATABASE_PASSWORD (and DATABASE_NAME) for your Postgres,
+# via your .env / process env or the Dashboard > Infrastructure form. Pending schema migrations run
+# automatically at boot (DATABASE_AUTO_MIGRATE=true).
+DATABASE_NAME=openwa
 
 # Redis & Queue (disabled by default)
 REDIS_ENABLED=false

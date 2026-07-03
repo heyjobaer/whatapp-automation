@@ -1,6 +1,6 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { ConflictException, Injectable, NotFoundException, Inject } from '@nestjs/common';
+import { Knex } from 'knex';
+import { KNEX_CONNECTION } from '../../database/database.module';
 import { Template } from './entities/template.entity';
 import { CreateTemplateDto, UpdateTemplateDto } from './dto';
 import { createLogger } from '../../common/services/logger.service';
@@ -10,22 +10,20 @@ import { isUniqueConstraintError } from '../../common/utils/unique-constraint.ut
 export class TemplateService {
   private readonly logger = createLogger('TemplateService');
 
-  constructor(
-    @InjectRepository(Template, 'data')
-    private readonly templateRepository: Repository<Template>,
-  ) {}
+  constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
 
   async create(sessionId: string, dto: CreateTemplateDto): Promise<Template> {
-    const template = this.templateRepository.create({
-      sessionId,
-      name: dto.name,
-      body: dto.body,
-      header: dto.header ?? null,
-      footer: dto.footer ?? null,
-    });
-
     try {
-      const saved = await this.templateRepository.save(template);
+      const [row] = await this.knex('templates')
+        .insert({
+          sessionId,
+          name: dto.name,
+          body: dto.body,
+          header: dto.header ?? null,
+          footer: dto.footer ?? null,
+        })
+        .returning('*');
+      const saved = row as Template;
       this.logger.log('Template created', { sessionId, templateId: saved.id, name: saved.name });
       return saved;
     } catch (err) {
@@ -37,14 +35,11 @@ export class TemplateService {
   }
 
   async findBySession(sessionId: string): Promise<Template[]> {
-    return this.templateRepository.find({
-      where: { sessionId },
-      order: { createdAt: 'DESC' },
-    });
+    return this.knex('templates').where({ sessionId }).orderBy('createdAt', 'desc') as Promise<Template[]>;
   }
 
   async findOne(sessionId: string, id: string): Promise<Template> {
-    const template = await this.templateRepository.findOne({ where: { id, sessionId } });
+    const template = (await this.knex('templates').where({ id, sessionId }).first()) as Template | undefined;
     if (!template) {
       throw new NotFoundException(`Template with id '${id}' not found`);
     }
@@ -65,10 +60,10 @@ export class TemplateService {
     if (templateName) {
       // Order by createdAt ASC so resolution is deterministic if more than one row shares a name
       // (possible only on a DB predating the unique index); the migration keeps the earliest too.
-      const template = await this.templateRepository.findOne({
-        where: { name: templateName, sessionId },
-        order: { createdAt: 'ASC' },
-      });
+      const template = (await this.knex('templates')
+        .where({ name: templateName, sessionId })
+        .orderBy('createdAt', 'asc')
+        .first()) as Template | undefined;
       if (!template) {
         throw new NotFoundException(`Template with name '${templateName}' not found`);
       }
@@ -81,24 +76,31 @@ export class TemplateService {
   async update(sessionId: string, id: string, dto: UpdateTemplateDto): Promise<Template> {
     const template = await this.findOne(sessionId, id);
 
-    if (dto.name !== undefined) template.name = dto.name;
-    if (dto.body !== undefined) template.body = dto.body;
-    if (dto.header !== undefined) template.header = dto.header;
-    if (dto.footer !== undefined) template.footer = dto.footer;
+    const patch: Record<string, unknown> = {};
+    if (dto.name !== undefined) patch.name = dto.name;
+    if (dto.body !== undefined) patch.body = dto.body;
+    if (dto.header !== undefined) patch.header = dto.header;
+    if (dto.footer !== undefined) patch.footer = dto.footer;
 
     try {
-      return await this.templateRepository.save(template);
+      const [row] = await this.knex('templates')
+        .where({ id })
+        .update({ ...patch, updatedAt: this.knex.fn.now() })
+        .returning('*');
+      return row as Template;
     } catch (err) {
       if (isUniqueConstraintError(err)) {
-        throw new ConflictException(`A template named '${template.name}' already exists for this session`);
+        throw new ConflictException(
+          `A template named '${dto.name ?? template.name}' already exists for this session`,
+        );
       }
       throw err;
     }
   }
 
   async delete(sessionId: string, id: string): Promise<void> {
-    const template = await this.findOne(sessionId, id);
-    await this.templateRepository.remove(template);
+    await this.findOne(sessionId, id);
+    await this.knex('templates').where({ id }).del();
     this.logger.log('Template deleted', { sessionId, templateId: id });
   }
 }

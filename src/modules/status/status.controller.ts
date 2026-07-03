@@ -4,7 +4,7 @@ import { StatusService } from './status.service';
 import { SendTextStatusDto } from './dto/send-text-status.dto';
 import { SendImageStatusDto, SendVideoStatusDto } from './dto/send-media-status.dto';
 import { RequireRole } from '../auth/decorators/auth.decorators';
-import { ApiKeyRole } from '../auth/entities/api-key.entity';
+import { UserRole } from '../auth/entities/role.entity';
 
 @ApiTags('Status')
 @Controller('sessions/:sessionId/status')
@@ -24,7 +24,7 @@ export class StatusController {
   }
 
   @Post('send-text')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Post a text status (Baileys only)' })
   async sendTextStatus(@Param('sessionId') sessionId: string, @Body() dto: SendTextStatusDto) {
     return this.statusService.postTextStatus(sessionId, dto.text, {
@@ -35,7 +35,7 @@ export class StatusController {
   }
 
   @Post('send-image')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Post an image status (Baileys only)' })
   async sendImageStatus(@Param('sessionId') sessionId: string, @Body() dto: SendImageStatusDto) {
     return this.statusService.postImageStatus(sessionId, dto.image, {
@@ -45,7 +45,7 @@ export class StatusController {
   }
 
   @Post('send-video')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Post a video status (Baileys only)' })
   async sendVideoStatus(@Param('sessionId') sessionId: string, @Body() dto: SendVideoStatusDto) {
     return this.statusService.postVideoStatus(sessionId, dto.video, {
@@ -55,7 +55,7 @@ export class StatusController {
   }
 
   @Delete(':statusId')
-  @RequireRole(ApiKeyRole.OPERATOR)
+  @RequireRole(UserRole.READONLY)
   @ApiOperation({ summary: 'Delete own status' })
   async deleteStatus(@Param('sessionId') sessionId: string, @Param('statusId') statusId: string) {
     await this.statusService.deleteStatus(sessionId, statusId);

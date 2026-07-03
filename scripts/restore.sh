@@ -2,13 +2,15 @@
 #
 # OpenWA restore.
 #
-# Restores BOTH databases (auth/audit + data) and the WhatsApp sessions from an
-# archive produced by scripts/backup.sh, so API keys and audit history survive.
+# Restores the single PostgreSQL database (auth/API keys + audit + all data) and the WhatsApp
+# sessions/media from an archive produced by scripts/backup.sh.
 #
 # Usage:
 #   ./scripts/restore.sh <backup-archive.tar.gz>
 # Environment:
 #   OPENWA_DATA_DIR   data directory to restore into (default: ./data)
+#   DATABASE_URL, or DATABASE_HOST/PORT/USERNAME/PASSWORD/NAME  (target Postgres)
+#   RESTORE_DB=true   also import database.sql into Postgres (default: false — printed instead)
 #
 # Stop the OpenWA app before restoring. A snapshot of the current data dir is taken
 # first so a bad restore can be undone.
@@ -40,18 +42,6 @@ fi
 
 mkdir -p "$DATA_DIR"
 
-if [ -f "$STAGE/main.sqlite" ]; then
-  log "Restoring auth/audit DB (main.sqlite)"
-  cp "$STAGE/main.sqlite" "$DATA_DIR/main.sqlite"
-else
-  log "WARN: main.sqlite not in archive — API keys / audit log will NOT be restored"
-fi
-
-if [ -f "$STAGE/openwa.sqlite" ]; then
-  log "Restoring data store (openwa.sqlite)"
-  cp "$STAGE/openwa.sqlite" "$DATA_DIR/openwa.sqlite"
-fi
-
 if [ -d "$STAGE/sessions" ]; then
   log "Restoring WhatsApp sessions"
   rm -rf "$DATA_DIR/sessions"
@@ -65,9 +55,25 @@ if [ -d "$STAGE/media" ]; then
 fi
 
 if [ -f "$STAGE/database.sql" ]; then
-  cp "$STAGE/database.sql" "$DATA_DIR/database.sql"
-  log "Postgres dump present — import it manually into your Postgres instance:"
-  log "  psql \"\$DATABASE_URL\" < $DATA_DIR/database.sql"
+  if [ "${RESTORE_DB:-false}" = "true" ]; then
+    log "Importing database.sql into PostgreSQL"
+    if [ -n "${DATABASE_URL:-}" ]; then
+      psql "$DATABASE_URL" <"$STAGE/database.sql"
+    else
+      PGPASSWORD="${DATABASE_PASSWORD:-}" psql \
+        -h "${DATABASE_HOST:-localhost}" \
+        -p "${DATABASE_PORT:-5432}" \
+        -U "${DATABASE_USERNAME:-openwa}" \
+        "${DATABASE_NAME:-openwa}" <"$STAGE/database.sql"
+    fi
+  else
+    cp "$STAGE/database.sql" "$DATA_DIR/database.sql"
+    log "Postgres dump saved to $DATA_DIR/database.sql — import it into your Postgres instance:"
+    log "  psql \"\$DATABASE_URL\" < $DATA_DIR/database.sql"
+    log "  (or re-run with RESTORE_DB=true to import automatically)"
+  fi
+else
+  log "WARN: database.sql not in archive — API keys / data will NOT be restored"
 fi
 
 log "Restore complete. Start the app and confirm an existing API key still authenticates."

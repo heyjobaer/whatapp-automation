@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApiKeyRole } from '../../../modules/auth/entities/api-key.entity';
+import { UserRole } from '../../../modules/auth/entities/role.entity';
 import type { ChatState } from '../../../engine/interfaces/whatsapp-engine.interface';
 import type { SessionService } from '../../../modules/session/session.service';
 import { SessionResponseDto } from '../../../modules/session/dto/session-response.dto';
@@ -18,9 +18,9 @@ export function sessionTools(session: SessionService): ToolDescriptor[] {
         limit: z.number().int().min(1).max(1000).optional(),
         offset: z.number().int().min(0).optional(),
       }),
-      handler: (input: { limit?: number; offset?: number }, apiKey) =>
+      handler: (input: { limit?: number; offset?: number }) =>
         session
-          .findAll(apiKey.allowedSessions, { limit: input.limit, offset: input.offset })
+          .findAll(null, { limit: input.limit, offset: input.offset })
           .then(ss => ss.map(s => SessionResponseDto.fromEntity(s))),
     },
     {
@@ -50,13 +50,13 @@ export function sessionTools(session: SessionService): ToolDescriptor[] {
       description: 'Aggregate session counts (total, active, ready, disconnected) the key is allowed to see.',
       tier: 'read',
       inputSchema: z.object({}),
-      handler: (_input, apiKey) => session.getStats(apiKey.allowedSessions),
+      handler: (_input) => session.getStats(null),
     },
     {
       name: 'SessionMarkChatRead',
       description: 'Mark a chat as read (clears unread count). Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -69,7 +69,7 @@ export function sessionTools(session: SessionService): ToolDescriptor[] {
       name: 'SessionMarkChatUnread',
       description: 'Mark a chat as unread. Requires OPERATOR role.',
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,
@@ -82,7 +82,7 @@ export function sessionTools(session: SessionService): ToolDescriptor[] {
       name: 'SessionSendChatState',
       description: "Show a typing/recording indicator in a chat, or clear it with 'paused'. Requires OPERATOR role.",
       tier: 'write',
-      requiredRole: ApiKeyRole.OPERATOR,
+      requiredRole: UserRole.READONLY,
       sessionScoped: true,
       inputSchema: z.object({
         sessionId,

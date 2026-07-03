@@ -69,15 +69,6 @@ const FORBIDDEN_PROD_SECRETS = new Set([
   'demo',
 ]);
 
-/**
- * Whether to warn that API_KEY_PEPPER is unset in production. Without a pepper, stored API-key hashes
- * fall back to plain SHA-256 (still functional). Advisory only — enabling a pepper re-hashes keys and
- * invalidates existing ones (see api-key-hash.ts), so it stays opt-in and must never be enforced.
- */
-export function isApiKeyPepperMissingInProduction(nodeEnv?: string, apiKeyPepper?: string): boolean {
-  return nodeEnv === 'production' && !apiKeyPepper?.trim();
-}
-
 /** A built-in S3 endpoint is the bundled MinIO (host `minio`) — or unset (the built-in default). An
  * external endpoint (e.g. s3.amazonaws.com) is reachable, so its credentials are never exempted. */
 function isInternalS3Endpoint(endpoint?: string): boolean {
@@ -92,7 +83,6 @@ function isInternalS3Endpoint(endpoint?: string): boolean {
 
 export interface SecretCheckEnv {
   nodeEnv?: string;
-  databaseType?: string;
   databasePassword?: string;
   /** POSTGRES_BUILTIN — when 'true', OpenWA runs the bundled Postgres on the internal-only network. */
   postgresBuiltIn?: string;
@@ -105,18 +95,20 @@ export interface SecretCheckEnv {
   s3Endpoint?: string;
   /** MINIO_BUILTIN — when 'true', OpenWA runs the bundled MinIO on the internal-only network. */
   minioBuiltIn?: string;
-  apiMasterKey?: string;
-  /** ALLOW_DEV_API_KEY — when 'true' it seeds the well-known public `dev-admin-key` as an ADMIN credential. */
-  allowDevApiKey?: string;
+  /** JWT_SECRET — used to sign auth tokens; REQUIRED and must be strong in production. */
+  jwtSecret?: string;
+  /** SUPER_ADMIN_PASSWORD — optional; when set it must not be a known-weak placeholder. */
+  superAdminPassword?: string;
   /** REDIS_PASSWORD — optional; passwordless private-network Redis is supported, so only a known placeholder is rejected. */
   redisPassword?: string;
 }
 
 /**
  * Refuse to boot in production when a required secret is empty or a known default/
- * placeholder. Only secrets actually in use are checked: the DB password
- * when DATABASE_TYPE=postgres, the S3 keys when STORAGE_TYPE=s3, and API_MASTER_KEY
- * whenever it is set. Throws with the offending var names so the operator can fix them.
+ * placeholder. Only secrets actually in use are checked: the DB password (PostgreSQL is
+ * the only supported database now, so it is always required), the S3 keys when
+ * STORAGE_TYPE=s3, and API_MASTER_KEY whenever it is set. Throws with the offending var
+ * names so the operator can fix them.
  */
 export function assertNoDefaultSecretsInProduction(env: SecretCheckEnv): void {
   if (env.nodeEnv !== 'production') return;
@@ -131,7 +123,8 @@ export function assertNoDefaultSecretsInProduction(env: SecretCheckEnv): void {
   // reachable, so its weak credential is still enforced.
   const dbHost = env.databaseHost?.trim();
   const dbExempt = env.postgresBuiltIn === 'true' && (!dbHost || dbHost === 'postgres');
-  if (env.databaseType === 'postgres' && !dbExempt && isWeak(env.databasePassword)) {
+  // PostgreSQL is now the only supported database, so a DB password is always required in production.
+  if (!dbExempt && isWeak(env.databasePassword)) {
     problems.push('DATABASE_PASSWORD');
   }
   const s3Exempt = env.minioBuiltIn === 'true' && isInternalS3Endpoint(env.s3Endpoint);
@@ -139,19 +132,20 @@ export function assertNoDefaultSecretsInProduction(env: SecretCheckEnv): void {
     if (isWeak(env.s3AccessKey)) problems.push('S3_ACCESS_KEY');
     if (isWeak(env.s3SecretKey)) problems.push('S3_SECRET_KEY');
   }
-  // API_MASTER_KEY is optional, but if provided it must not be a known default.
-  if (env.apiMasterKey && FORBIDDEN_PROD_SECRETS.has(env.apiMasterKey.trim().toLowerCase())) {
-    problems.push('API_MASTER_KEY');
+  // JWT signing secret is REQUIRED in production (empty or a known placeholder is rejected) — without a
+  // strong secret an attacker can forge auth tokens for any role.
+  if (isWeak(env.jwtSecret)) {
+    problems.push('JWT_SECRET');
+  }
+  // SUPER_ADMIN_PASSWORD is optional (a random one is generated when unset), but if provided it must
+  // not be a known-weak placeholder.
+  if (env.superAdminPassword && FORBIDDEN_PROD_SECRETS.has(env.superAdminPassword.trim().toLowerCase())) {
+    problems.push('SUPER_ADMIN_PASSWORD');
   }
   // Redis auth is optional (passwordless private-network Redis is a supported deployment), so unlike
   // DATABASE_PASSWORD this rejects only a known placeholder VALUE — never an empty/unset password.
   if (env.redisPassword && FORBIDDEN_PROD_SECRETS.has(env.redisPassword.trim().toLowerCase())) {
     problems.push('REDIS_PASSWORD');
-  }
-  // ALLOW_DEV_API_KEY=true seeds the publicly-documented `dev-admin-key` as an ADMIN credential
-  // (when no API_MASTER_KEY is set) — never allow that opt-in to be carried into production.
-  if (env.allowDevApiKey === 'true') {
-    problems.push('ALLOW_DEV_API_KEY (seeds the public dev-admin-key)');
   }
 
   if (problems.length > 0) {

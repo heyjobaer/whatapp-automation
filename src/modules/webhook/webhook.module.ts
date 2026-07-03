@@ -1,5 +1,4 @@
 import { Module, DynamicModule, Type } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { Webhook } from './entities/webhook.entity';
 import { WebhookDeliveryFailure } from './entities/webhook-delivery-failure.entity';
 import { WebhookService } from './webhook.service';
@@ -18,7 +17,7 @@ if (process.env.QUEUE_ENABLED === 'true') {
 }
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Webhook, WebhookDeliveryFailure], 'data'), EngineModule, ...queueModules],
+  imports: [EngineModule, ...queueModules],
   controllers: [WebhookController, WebhooksListController],
   providers: [WebhookService],
   exports: [WebhookService],

@@ -1,7 +1,7 @@
-import { Controller, Get, ServiceUnavailableException } from '@nestjs/common';
+import { Controller, Get, ServiceUnavailableException, Inject } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { Knex } from 'knex';
+import { KNEX_CONNECTION } from '../../database/database.module';
 import { Public } from '../auth/decorators/auth.decorators';
 import { SkipThrottle } from '@nestjs/throttler';
 import { ShutdownService } from '../../common/services/shutdown.service';
@@ -29,8 +29,7 @@ const { version: APP_VERSION } = require('../../../package.json') as { version: 
 @SkipThrottle()
 export class HealthController {
   constructor(
-    @InjectDataSource('main') private readonly mainDataSource: DataSource,
-    @InjectDataSource('data') private readonly dataDataSource: DataSource,
+    @Inject(KNEX_CONNECTION) private readonly knex: Knex,
     private readonly shutdownService: ShutdownService,
   ) {}
 
@@ -65,17 +64,13 @@ export class HealthController {
       throw new ServiceUnavailableException({ status: 'error', details: { shutdown: { status: 'draining' } } });
     }
 
-    const [main, data] = await Promise.all([
-      this.probeDatabase(this.mainDataSource),
-      this.probeDatabase(this.dataDataSource),
-    ]);
+    const database = await this.probeDatabase();
 
     const details: Record<string, DependencyStatus> = {
-      mainDatabase: { status: main },
-      dataDatabase: { status: data },
+      database: { status: database },
     };
 
-    if (main === 'down' || data === 'down') {
+    if (database === 'down') {
       // 503 so orchestrators/LBs stop routing traffic to a node with a dead DB.
       throw new ServiceUnavailableException({ status: 'error', details });
     }
@@ -83,9 +78,9 @@ export class HealthController {
     return { status: 'ok', details };
   }
 
-  private async probeDatabase(dataSource: DataSource): Promise<'up' | 'down'> {
+  private async probeDatabase(): Promise<'up' | 'down'> {
     try {
-      await this.withTimeout(dataSource.query('SELECT 1'), READINESS_PROBE_TIMEOUT_MS);
+      await this.withTimeout(this.knex.raw('SELECT 1'), READINESS_PROBE_TIMEOUT_MS);
       return 'up';
     } catch {
       return 'down';
