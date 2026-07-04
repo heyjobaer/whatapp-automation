@@ -30,11 +30,18 @@ export class LeadService {
   constructor(@Inject(KNEX_CONNECTION) private readonly knex: Knex) {}
 
   async getOrCreate(sessionId: string, chatId: string): Promise<ChatLead> {
-    let row = await this.knex<ChatLead>(TABLE).where({ sessionId, chatId }).first();
-    if (!row) {
-      [row] = await this.knex<ChatLead>(TABLE).insert({ sessionId, chatId }).returning('*');
-    }
-    return row;
+    const existing = await this.knex<ChatLead>(TABLE).where({ sessionId, chatId }).first();
+    if (existing) return existing;
+    // Race-safe insert: two near-simultaneous first messages for the same chat must not throw on
+    // the UNIQUE(sessionId, chatId) constraint. onConflict().ignore() returns [] for the loser,
+    // which then re-selects the row the winner created.
+    const [row] = await this.knex<ChatLead>(TABLE)
+      .insert({ sessionId, chatId })
+      .onConflict(['sessionId', 'chatId'])
+      .ignore()
+      .returning('*');
+    if (row) return row;
+    return (await this.knex<ChatLead>(TABLE).where({ sessionId, chatId }).first()) as ChatLead;
   }
 
   async get(sessionId: string, chatId: string): Promise<ChatLead | undefined> {

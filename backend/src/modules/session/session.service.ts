@@ -473,14 +473,35 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     if (!incoming.body || incoming.body.trim().length === 0) return;
 
     try {
+      // Reply after a human-like delay (default 20–30s) instead of instantly. The LLM call counts
+      // toward the window, so the reply lands roughly `delay` seconds after the customer's message.
+      const startedAt = Date.now();
+      const targetDelayMs = this.autoReplyDelayMs();
+
       const reply = await this.aiService.getReply(id, incoming.chatId);
       if (!reply) return;
-      // Re-check liveness: the AI call is async and a stop()/delete() may have retired this engine.
+
+      const remainingMs = targetDelayMs - (Date.now() - startedAt);
+      if (remainingMs > 0) await new Promise(resolve => setTimeout(resolve, remainingMs));
+
+      // Re-check liveness: the delay + async AI call give a stop()/delete() time to retire this engine.
       if (!this.isLiveEngine(id, engine)) return;
       await engine.sendTextMessage(incoming.chatId, reply);
     } catch (err) {
       this.logger.error(`AI auto-reply failed for ${id} chat ${incoming.chatId}`, String(err));
     }
+  }
+
+  /**
+   * Random, human-like delay (ms) before an AI auto-reply. Defaults to 20–30s; override with
+   * AI_REPLY_DELAY_MIN_MS / AI_REPLY_DELAY_MAX_MS (set both to 0 to reply instantly).
+   */
+  private autoReplyDelayMs(): number {
+    const rawMin = Number(process.env.AI_REPLY_DELAY_MIN_MS ?? 20000);
+    const rawMax = Number(process.env.AI_REPLY_DELAY_MAX_MS ?? 30000);
+    const min = Number.isFinite(rawMin) && rawMin >= 0 ? rawMin : 20000;
+    const max = Number.isFinite(rawMax) && rawMax >= min ? rawMax : Math.max(min, 30000);
+    return Math.round(min + Math.random() * (max - min));
   }
 
   /**
