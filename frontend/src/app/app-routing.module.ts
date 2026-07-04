@@ -1,7 +1,6 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
-// AdminGuard is still exported from ./core/guards — re-add it here when re-enabling the infrastructure route.
-import { AuthGuard, SuperAdminGuard } from './core/guards';
+import { AdminGuard, AuthGuard, SuperAdminGuard } from './core/guards';
 import { LayoutComponent } from './layout/layout.component';
 
 const routes: Routes = [
@@ -18,6 +17,12 @@ const routes: Routes = [
       { path: 'sessions', loadChildren: () => import('./pages/sessions/sessions.module').then(m => m.SessionsModule) },
       { path: 'chats', loadChildren: () => import('./pages/chats/chats.module').then(m => m.ChatsModule) },
       { path: 'properties', loadChildren: () => import('./pages/properties/properties.module').then(m => m.PropertiesModule) },
+      { path: 'leads', loadChildren: () => import('./pages/leads/leads.module').then(m => m.LeadsModule) },
+      {
+        path: 'ai-settings',
+        canActivate: [AdminGuard],
+        loadChildren: () => import('./pages/ai-settings/ai-settings.module').then(m => m.AiSettingsModule),
+      },
       // Temporarily disabled (kept in code, not routed):
       // { path: 'webhooks', loadChildren: () => import('./pages/webhooks/webhooks.module').then(m => m.WebhooksModule) },
       // { path: 'templates', loadChildren: () => import('./pages/templates/templates.module').then(m => m.TemplatesModule) },

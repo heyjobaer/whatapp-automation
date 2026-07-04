@@ -375,6 +375,7 @@ export interface ChatLead {
   id: string;
   sessionId: string;
   chatId: string;
+  phone?: string | null;
   name?: string | null;
   language: string;
   budget?: string | null;
@@ -384,4 +385,29 @@ export interface ChatLead {
   leadScore: number;
   createdAt?: string;
   updatedAt?: string;
+}
+
+// ── AI settings (admin-editable, DB-backed; API key is never returned raw) ──
+export interface AiSettingsView {
+  provider: string;
+  model: string;
+  autoReplyEnabled: boolean;
+  replyDelayMinMs: number;
+  replyDelayMaxMs: number;
+  agencyName: string | null;
+  systemPrompt: string | null;
+  apiKeySet: boolean;
+  apiKeyPreview: string | null;
+  updatedAt: string;
+}
+
+export interface AiSettingsUpdate {
+  provider?: string;
+  apiKey?: string;
+  model?: string;
+  autoReplyEnabled?: boolean;
+  replyDelayMinMs?: number;
+  replyDelayMaxMs?: number;
+  agencyName?: string | null;
+  systemPrompt?: string | null;
 }

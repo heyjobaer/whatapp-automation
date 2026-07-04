@@ -33,6 +33,7 @@ import { EventsGateway } from '../events/events.gateway';
 import { WebhookService } from '../webhook/webhook.service';
 import { HookManager } from '../../core/hooks';
 import { AiService } from '../ai/ai.service';
+import { AiSettingsService } from '../ai/ai-settings.service';
 import {
   deliveryStatusToMessageStatus,
   deliveryStatusToAck,
@@ -140,6 +141,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     private readonly webhookService: WebhookService,
     private readonly hookManager: HookManager,
     private readonly aiService: AiService,
+    private readonly aiSettings: AiSettingsService,
     @Optional()
     private readonly configService?: ConfigService,
   ) {}
@@ -467,18 +469,24 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
    * is logged and never propagates into the message pipeline.
    */
   private async maybeAutoReply(id: string, engine: IWhatsAppEngine, incoming: IncomingMessage): Promise<void> {
-    const autoReplyEnabled = process.env.AI_AUTO_REPLY !== 'false';
-    if (!autoReplyEnabled || !process.env.GROQ_API_KEY) return;
     if (incoming.fromMe || incoming.isGroup || incoming.isStatusBroadcast) return;
     if (!incoming.body || incoming.body.trim().length === 0) return;
+
+    // Config comes from the DB (AI settings page), not env: the auto-reply toggle, API key and delay.
+    const settings = await this.aiSettings.get();
+    if (!settings.autoReplyEnabled || !settings.apiKey) return;
 
     try {
       // Reply after a human-like delay (default 20–30s) instead of instantly. The LLM call counts
       // toward the window, so the reply lands roughly `delay` seconds after the customer's message.
       const startedAt = Date.now();
-      const targetDelayMs = this.autoReplyDelayMs();
+      const targetDelayMs = this.autoReplyDelayMs(settings.replyDelayMinMs, settings.replyDelayMaxMs);
 
-      const reply = await this.aiService.getReply(id, incoming.chatId);
+      // Resolve the customer's real phone number so the Leads table can show it (the chat id is a
+      // `@lid` privacy id for many contacts and does NOT contain the number).
+      const phone = await this.resolveLeadPhone(id, incoming);
+
+      const reply = await this.aiService.getReply(id, incoming.chatId, phone);
       if (!reply) return;
 
       const remainingMs = targetDelayMs - (Date.now() - startedAt);
@@ -493,12 +501,23 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
   }
 
   /**
-   * Random, human-like delay (ms) before an AI auto-reply. Defaults to 20–30s; override with
-   * AI_REPLY_DELAY_MIN_MS / AI_REPLY_DELAY_MAX_MS (set both to 0 to reply instantly).
+   * Best-effort real phone number (digits, no `+`) for a 1:1 chat, for the Leads table:
+   *  1. an already-resolved `senderPhone` on the message,
+   *  2. the local part of a `<digits>@c.us` chat id,
+   *  3. otherwise resolve via the engine (whatsapp-web.js getContactLidAndPhone) for `@lid` ids.
    */
-  private autoReplyDelayMs(): number {
-    const rawMin = Number(process.env.AI_REPLY_DELAY_MIN_MS ?? 20000);
-    const rawMax = Number(process.env.AI_REPLY_DELAY_MAX_MS ?? 30000);
+  private async resolveLeadPhone(sessionId: string, incoming: IncomingMessage): Promise<string | null> {
+    if (incoming.senderPhone) return incoming.senderPhone;
+    const [local, domain] = incoming.chatId.split('@');
+    if (domain === 'c.us' && /^\d{6,}$/.test(local)) return local;
+    return this.resolveSenderPhone(sessionId, incoming.chatId);
+  }
+
+  /**
+   * Random, human-like delay (ms) before an AI auto-reply, within the [min, max] window from the
+   * AI settings (both 0 = reply instantly).
+   */
+  private autoReplyDelayMs(rawMin: number, rawMax: number): number {
     const min = Number.isFinite(rawMin) && rawMin >= 0 ? rawMin : 20000;
     const max = Number.isFinite(rawMax) && rawMax >= min ? rawMax : Math.max(min, 30000);
     return Math.round(min + Math.random() * (max - min));

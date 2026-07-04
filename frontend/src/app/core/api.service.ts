@@ -18,6 +18,8 @@ import type {
   PropertyPage,
   PropertyPayload,
   ChatLead,
+  AiSettingsView,
+  AiSettingsUpdate,
   SaveConfigPayload,
   SavedConfig,
   SendMediaPayload,
@@ -287,6 +289,12 @@ export class ApiService {
   readonly stats = {
     getOverview: () => request<OverviewStats>('/stats/overview'),
     getMessages: (period: StatsPeriod) => request<MessageStats>(`/stats/messages?period=${period}`),
+  };
+
+  /** Admin AI configuration (auto-reply toggle, delay, provider/model/key). API key masked on read. */
+  readonly aiSettings = {
+    get: () => request<AiSettingsView>('/ai/settings'),
+    update: (data: AiSettingsUpdate) => request<AiSettingsView>('/ai/settings', { method: 'PUT', body: JSON.stringify(data) }),
   };
 
   /** Real-estate "product list" CRUD (ported from the AI-automation project). */

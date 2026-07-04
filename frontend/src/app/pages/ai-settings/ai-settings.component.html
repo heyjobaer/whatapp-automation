@@ -1,0 +1,110 @@
+@if (vm$ | async; as vm) {
+  <div class="ai-settings-page">
+    <app-page-header title="AI Settings" subtitle="Configure the WhatsApp AI auto-responder" />
+
+    @if (vm.loading) {
+      <div class="card loading">
+        <lucide-icon name="loader-2" class="animate-spin" [size]="28" />
+      </div>
+    } @else if (vm.loadError) {
+      <div class="error-banner" role="alert">
+        <lucide-icon name="alert-circle" [size]="20" />
+        <span>Couldn't load AI settings.</span>
+      </div>
+    } @else {
+      <form class="card" (ngSubmit)="save()">
+        <!-- Auto-reply toggle -->
+        <div class="row toggle-row">
+          <div class="row-info">
+            <span class="row-title">Auto-reply</span>
+            <span class="row-hint">When on, the AI answers new customer messages automatically.</span>
+          </div>
+          <label class="switch">
+            <input type="checkbox" [(ngModel)]="autoReplyEnabled" name="autoReplyEnabled" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Provider + model -->
+        <div class="grid">
+          <div class="field">
+            <label>Provider</label>
+            <input type="text" [(ngModel)]="provider" name="provider" placeholder="groq" />
+            <span class="hint">Currently only <code>groq</code> is supported.</span>
+          </div>
+          <div class="field">
+            <label>Model</label>
+            <input type="text" [(ngModel)]="model" name="model" placeholder="llama-3.3-70b-versatile" />
+          </div>
+        </div>
+
+        <!-- API key -->
+        <div class="field">
+          <label>API key</label>
+          <input
+            type="password"
+            [(ngModel)]="apiKey"
+            name="apiKey"
+            autocomplete="off"
+            [placeholder]="vm.settings?.apiKeySet ? (vm.settings?.apiKeyPreview || '•••• set') : 'Paste your API key'"
+          />
+          <span class="hint">
+            @if (vm.settings?.apiKeySet) {
+              A key is set ({{ vm.settings?.apiKeyPreview }}). Leave blank to keep it, or paste a new one to replace it.
+            } @else {
+              No key set yet — auto-reply stays off until you add one.
+            }
+          </span>
+        </div>
+
+        <div class="divider"></div>
+
+        <!-- Reply delay -->
+        <div class="grid">
+          <div class="field">
+            <label>Reply delay — min (ms)</label>
+            <input type="number" min="0" step="1000" [(ngModel)]="replyDelayMinMs" name="replyDelayMinMs" />
+          </div>
+          <div class="field">
+            <label>Reply delay — max (ms)</label>
+            <input type="number" min="0" step="1000" [(ngModel)]="replyDelayMaxMs" name="replyDelayMaxMs" />
+          </div>
+        </div>
+        <span class="hint">A random wait in this window before replying (20000 = 20s). Set both to 0 to reply instantly.</span>
+
+        <div class="divider"></div>
+
+        <!-- Persona -->
+        <div class="field">
+          <label>Agency name</label>
+          <input type="text" [(ngModel)]="agencyName" name="agencyName" placeholder="Your Dubai real estate agency" />
+          <span class="hint">Used in the AI's persona (“I'm your … consultant”).</span>
+        </div>
+
+        <div class="field">
+          <label>System prompt override (optional)</label>
+          <textarea
+            rows="5"
+            [(ngModel)]="systemPrompt"
+            name="systemPrompt"
+            placeholder="Leave blank to use the built-in Dubai real-estate prompt. The live property list is always appended automatically."
+          ></textarea>
+        </div>
+
+        <div class="actions">
+          <span class="updated">Last updated: {{ vm.settings?.updatedAt }}</span>
+          <button type="submit" class="btn-primary" [disabled]="vm.saving">
+            @if (vm.saving) {
+              <lucide-icon name="loader-2" class="animate-spin" [size]="16" />
+            } @else {
+              <lucide-icon name="save" [size]="16" />
+            }
+            Save changes
+          </button>
+        </div>
+      </form>
+    }
+  </div>
+}

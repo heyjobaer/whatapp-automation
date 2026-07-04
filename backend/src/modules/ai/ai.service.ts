@@ -1,10 +1,10 @@
 import { Inject, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { Knex } from 'knex';
 import { KNEX_CONNECTION } from '../database/database.module';
 import { MessageDirection } from '../message/entities/message.entity';
 import { PropertiesService } from '../properties/properties.service';
 import { LeadService } from '../leads/lead.service';
+import { AiSettingsService, AiSettings } from './ai-settings.service';
 import type { Property } from '../properties/entities/property.entity';
 import { LLM_PROVIDER } from './providers/llm-provider';
 import type { ChatMessage, LlmProvider } from './providers/llm-provider';
@@ -21,7 +21,7 @@ export class AiService {
   constructor(
     @Inject(LLM_PROVIDER) private readonly llm: LlmProvider,
     @Inject(KNEX_CONNECTION) private readonly knex: Knex,
-    private readonly config: ConfigService,
+    private readonly aiSettings: AiSettingsService,
     private readonly properties: PropertiesService,
     private readonly leads: LeadService,
   ) {}
@@ -34,7 +34,7 @@ export class AiService {
    *
    * Side effect: after producing a reply it recomputes the chat's lead score (Hot/Warm/Cold).
    */
-  async getReply(sessionId: string, chatId: string): Promise<string> {
+  async getReply(sessionId: string, chatId: string, phone?: string | null): Promise<string> {
     const rows = await this.knex('messages')
       .where({ sessionId, chatId })
       .whereNotNull('body')
@@ -56,10 +56,10 @@ export class AiService {
     }
 
     const userMessage = history[history.length - 1].content;
-    const properties = await this.properties.findAvailable();
+    const [properties, settings] = await Promise.all([this.properties.findAvailable(), this.aiSettings.get()]);
 
     this.logger.debug(`AI reply for ${chatId} (${history.length} msgs, ${properties.length} properties)`);
-    const raw = await this.llm.complete(this.buildSystemPrompt(properties), history, MAX_REPLY_TOKENS);
+    const raw = await this.llm.complete(this.buildSystemPrompt(properties, settings), history, MAX_REPLY_TOKENS);
 
     // The model marks a captured lead + the customer's language via hidden tags; parse then strip
     // them so the customer never sees them.
@@ -73,7 +73,7 @@ export class AiService {
 
     // Update the Hot/Warm/Cold lead state for this chat (best-effort; never block the reply).
     try {
-      await this.leads.updateAfterMessage(sessionId, chatId, userMessage, leadCaptured, language);
+      await this.leads.updateAfterMessage(sessionId, chatId, userMessage, leadCaptured, language, phone);
     } catch (err) {
       this.logger.error(`Lead update failed for ${sessionId} chat ${chatId}`, String(err));
     }
@@ -81,9 +81,9 @@ export class AiService {
     return reply;
   }
 
-  private buildSystemPrompt(properties: Property[]): string {
-    const override = this.config.get<string>('AI_SYSTEM_PROMPT');
-    const agency = this.config.get<string>('AGENCY_NAME') || 'our Dubai real estate agency';
+  private buildSystemPrompt(properties: Property[], settings: AiSettings): string {
+    const override = settings.systemPrompt;
+    const agency = settings.agencyName || 'our Dubai real estate agency';
 
     const list = properties.length
       ? properties

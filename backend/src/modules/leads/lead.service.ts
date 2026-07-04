@@ -6,6 +6,7 @@ export interface ChatLead {
   id: string;
   sessionId: string;
   chatId: string;
+  phone: string | null;
   name: string | null;
   language: string;
   budget: string | null;
@@ -93,6 +94,7 @@ export class LeadService {
     userMessage: string,
     leadCaptured: boolean,
     language = 'en',
+    phone?: string | null,
   ): Promise<ChatLead> {
     const current = await this.getOrCreate(sessionId, chatId);
     const extracted = this.extractInfo(userMessage);
@@ -103,12 +105,16 @@ export class LeadService {
       if (words.length >= 1 && words.length <= 3) nameUpdate.name = userMessage.trim();
     }
 
+    // Only set the phone once (don't overwrite a good value with a later null resolution).
+    const phoneUpdate: Partial<ChatLead> = phone && !current.phone ? { phone } : {};
+
     const merged: Partial<ChatLead> = { ...current, ...extracted, ...nameUpdate };
     const [updated] = await this.knex<ChatLead>(TABLE)
       .where({ sessionId, chatId })
       .update({
         ...extracted,
         ...nameUpdate,
+        ...phoneUpdate,
         language,
         isLead: leadCaptured || current.isLead,
         leadScore: this.calcScore(merged),

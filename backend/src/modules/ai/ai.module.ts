@@ -1,31 +1,23 @@
-import { Logger, Module } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+import { Module } from '@nestjs/common';
 import { AiService } from './ai.service';
+import { AiSettingsService } from './ai-settings.service';
+import { AiSettingsController } from './ai-settings.controller';
 import { LLM_PROVIDER, LlmProvider } from './providers/llm-provider';
 import { GroqProvider } from './providers/groq.provider';
 import { PropertiesModule } from '../properties/properties.module';
 import { LeadsModule } from '../leads/leads.module';
 
-// Picks the LLM provider from the `AI` env var (defaults to groq).
+// The LLM provider reads its key/model from the DB-backed AiSettingsService at call time.
 const llmProvider = {
   provide: LLM_PROVIDER,
-  useFactory: (config: ConfigService): LlmProvider => {
-    const choice = (config.get<string>('AI') || 'groq').toLowerCase();
-    const logger = new Logger('AiModule');
-    switch (choice) {
-      case 'groq':
-        logger.log('Using Groq as the AI provider');
-        return new GroqProvider(config);
-      default:
-        throw new Error(`Unknown AI provider "${choice}". Set AI=groq.`);
-    }
-  },
-  inject: [ConfigService],
+  useFactory: (settings: AiSettingsService): LlmProvider => new GroqProvider(settings),
+  inject: [AiSettingsService],
 };
 
 @Module({
   imports: [PropertiesModule, LeadsModule],
-  providers: [AiService, llmProvider],
-  exports: [AiService],
+  controllers: [AiSettingsController],
+  providers: [AiService, AiSettingsService, llmProvider],
+  exports: [AiService, AiSettingsService],
 })
 export class AiModule {}

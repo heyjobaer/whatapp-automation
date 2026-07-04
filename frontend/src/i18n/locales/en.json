@@ -72,6 +72,8 @@
     "sessions": "Sessions",
     "chats": "Chats",
     "properties": "Properties",
+    "leads": "Leads",
+    "aiSettings": "AI Settings",
     "webhooks": "Webhooks",
     "templates": "Templates",
     "apiKeys": "API Keys",

@@ -1,0 +1,100 @@
+@if (vm$ | async; as vm) {
+  <div class="leads-page">
+    <app-page-header title="Leads" subtitle="AI conversations, scored and ranked by buying intent">
+      <span badge>
+        <span class="count-badge hot">{{ vm.hotCount }} hot</span>
+        <span class="count-badge warm">{{ vm.warmCount }} warm</span>
+      </span>
+      <div actions>
+        <select class="session-select" [ngModel]="vm.selectedSessionId" (ngModelChange)="setSession($event)">
+          @if (vm.sessions.length === 0) {
+            <option value="">No sessions</option>
+          }
+          @for (s of vm.sessions; track s.id) {
+            <option [value]="s.id">{{ s.name }}{{ s.phone ? ' · ' + s.phone : '' }}</option>
+          }
+        </select>
+        <button class="btn-secondary" (click)="refresh()" title="Refresh">
+          <lucide-icon name="refresh-cw" [size]="16" />
+          Refresh
+        </button>
+      </div>
+    </app-page-header>
+
+    @if (vm.loadError) {
+      <div class="error-banner" role="alert">
+        <lucide-icon name="alert-circle" [size]="20" />
+        <span>Couldn't load leads. The session may not exist or the AI hasn't run yet.</span>
+      </div>
+    }
+
+    <div class="leads-content">
+      <div class="table-container">
+        @if (vm.loading || vm.loadingSessions) {
+          <div class="table-loading">
+            <lucide-icon name="loader-2" class="animate-spin" [size]="28" />
+          </div>
+        } @else if (vm.leads.length === 0) {
+          <div class="empty-table-state">
+            <lucide-icon name="zap" [size]="48" [strokeWidth]="1" />
+            <h3>No leads yet</h3>
+            <p>When customers message this session, the AI replies and scores each conversation here.</p>
+          </div>
+        } @else {
+          <table class="leads-table">
+            <thead>
+              <tr class="table-row header">
+                <th>Contact</th>
+                <th>Number</th>
+                <th>Language</th>
+                <th>Budget</th>
+                <th>Purpose</th>
+                <th>Type</th>
+                <th>Lead</th>
+                <th>Updated</th>
+                <th class="score-col">Score</th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (lead of vm.leads; track lead.id) {
+                <tr class="table-row">
+                  <td>
+                    <div class="lead-name">{{ lead.name || displayName(lead) }}</div>
+                    <div class="lead-sub">{{ lead.chatId }}</div>
+                  </td>
+                  <td>
+                    @if (phoneNumber(lead); as phone) {
+                      <a class="lead-phone" [href]="'https://wa.me/' + phone.replace('+', '')" target="_blank" rel="noopener">
+                        {{ phone }}
+                      </a>
+                    } @else {
+                      <span class="dash" title="No number — WhatsApp privacy id">—</span>
+                    }
+                  </td>
+                  <td>{{ (lead.language || 'en') | uppercase }}</td>
+                  <td>{{ lead.budget || '—' }}</td>
+                  <td>{{ lead.purpose || '—' }}</td>
+                  <td>{{ lead.propType || '—' }}</td>
+                  <td>
+                    @if (lead.isLead) {
+                      <span class="yes-pill"><lucide-icon name="check" [size]="12" /> Lead</span>
+                    } @else {
+                      <span class="dash">—</span>
+                    }
+                  </td>
+                  <td class="updated">{{ formatDate(lead.updatedAt) }}</td>
+                  <td class="score-col">
+                    <span class="score-pill {{ leadStatus(lead.leadScore) }}" [title]="leadStatus(lead.leadScore)">
+                      {{ lead.leadScore }}
+                    </span>
+                    <span class="score-label {{ leadStatus(lead.leadScore) }}">{{ leadStatus(lead.leadScore) }}</span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </div>
+    </div>
+  </div>
+}

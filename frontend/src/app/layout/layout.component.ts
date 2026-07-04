@@ -21,6 +21,8 @@ const ALL_NAV_ITEMS = [
   { to: '/sessions', icon: 'smartphone', key: 'sessions', adminOnly: false, superAdminOnly: false },
   { to: '/chats', icon: 'message-square', key: 'chats', adminOnly: false, superAdminOnly: false },
   { to: '/properties', icon: 'building-2', key: 'properties', adminOnly: false, superAdminOnly: false },
+  { to: '/leads', icon: 'zap', key: 'leads', adminOnly: false, superAdminOnly: false },
+  { to: '/ai-settings', icon: 'settings', key: 'aiSettings', adminOnly: true, superAdminOnly: false },
   // Temporarily disabled (kept in code, removed from the nav):
   // { to: '/webhooks', icon: 'webhook', key: 'webhooks', adminOnly: false, superAdminOnly: false },
   // { to: '/templates', icon: 'clipboard-list', key: 'templates', adminOnly: false, superAdminOnly: false },
