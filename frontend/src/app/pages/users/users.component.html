@@ -1,0 +1,160 @@
+@if (vm$ | async; as vm) {
+  @if (vm.loading) {
+    <div class="api-keys-page" style="display: flex; align-items: center; justify-content: center; min-height: 400px">
+      <lucide-icon name="loader-2" class="animate-spin" [size]="32" />
+    </div>
+  } @else {
+    <div class="api-keys-page">
+      <app-page-header title="Users" subtitle="Manage user accounts and their roles">
+        <div actions>
+          <button class="btn-primary" (click)="openModal()">
+            <lucide-icon name="plus" [size]="18" />
+            Add user
+          </button>
+        </div>
+      </app-page-header>
+
+      @if (vm.loadError) {
+        <div class="error-banner" role="alert">
+          <lucide-icon name="alert-circle" [size]="20" />
+          <span class="error-banner-text">Failed to load users.</span>
+        </div>
+      }
+
+      @if (vm.showModal) {
+        <div class="modal-overlay" (click)="closeModal()">
+          <div class="modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h2>Add user</h2>
+              <button class="btn-icon" (click)="closeModal()">
+                <lucide-icon name="x" [size]="20" />
+              </button>
+            </div>
+            <div class="modal-body">
+              <label>Email</label>
+              <input type="email" placeholder="user@example.com" [(ngModel)]="newEmail" autocomplete="off" />
+              <label>Name</label>
+              <input type="text" placeholder="Full name" [(ngModel)]="newName" autocomplete="off" />
+              <label>Password</label>
+              <input type="password" placeholder="At least 8 characters" [(ngModel)]="newPassword" autocomplete="new-password" />
+              <label>Role</label>
+              <select [(ngModel)]="newRole">
+                @for (r of roleNames; track r) {
+                  <option [value]="r">{{ r }}</option>
+                }
+              </select>
+              @if (vm.formError) {
+                <p class="error-banner-text" style="color: var(--danger, #ef4444); margin-top: 0.75rem">{{ vm.formError }}</p>
+              }
+            </div>
+            <div class="modal-footer">
+              <button class="btn-secondary" (click)="closeModal()">Cancel</button>
+              <button class="btn-primary" (click)="handleCreate()" [disabled]="vm.creating">
+                @if (vm.creating) {
+                  <lucide-icon name="loader-2" class="animate-spin" [size]="16" />
+                } @else {
+                  Create
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <div class="api-keys-content">
+        <div class="keys-table-container">
+          @if (vm.users.length === 0) {
+            <div class="empty-table-state">
+              <lucide-icon name="users" [size]="48" [strokeWidth]="1" />
+              <h3>No users</h3>
+              <p>Add your first user to grant dashboard access.</p>
+            </div>
+          } @else {
+            <table class="keys-table">
+              <thead>
+                <tr class="table-row header">
+                  <th>Email</th>
+                  <th>Name</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th>Last login</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                @for (user of vm.users; track user.id) {
+                  <tr class="table-row">
+                    <td><span class="name-cell">{{ user.email }}</span></td>
+                    <td>{{ user.name }}</td>
+                    <td><span class="permission-badge">{{ user.role }}</span></td>
+                    <td>
+                      <span class="status-badge" [class.active]="user.isActive" [class.inactive]="!user.isActive">
+                        {{ user.isActive ? 'Active' : 'Disabled' }}
+                      </span>
+                    </td>
+                    <td><span class="last-used">{{ formatDate(user.lastLoginAt) }}</span></td>
+                    <td>
+                      <span class="actions-cell">
+                        <button
+                          class="icon-btn"
+                          (click)="toggleActive(user)"
+                          [disabled]="user.id === currentUserId"
+                          [title]="user.isActive ? 'Disable' : 'Enable'"
+                        >
+                          <lucide-icon [name]="user.isActive ? 'user-x' : 'user-check'" [size]="16" />
+                        </button>
+                        <button
+                          class="icon-btn danger"
+                          (click)="setConfirmDelete({ id: user.id, email: user.email })"
+                          [disabled]="user.id === currentUserId"
+                          title="Delete"
+                        >
+                          <lucide-icon name="trash-2" [size]="16" />
+                        </button>
+                      </span>
+                    </td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+        </div>
+
+        <div class="permissions-reference">
+          <h3>Roles</h3>
+          <div class="permissions-list">
+            @for (r of roleNames; track r) {
+              <div class="perm-item">
+                <code>{{ r }}</code>
+                <span>{{ roleDescriptions[r] }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+
+      @if (vm.confirmDelete; as target) {
+        <div class="modal-overlay" (click)="setConfirmDelete(null)">
+          <div class="modal confirm-modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h2>Delete user</h2>
+              <button class="btn-icon" (click)="setConfirmDelete(null)">
+                <lucide-icon name="x" [size]="20" />
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="confirm-icon-wrapper">
+                <lucide-icon name="alert-triangle" [size]="48" class="confirm-warning-icon" />
+              </div>
+              <p class="confirm-message">Delete <strong>{{ target.email }}</strong>? This cannot be undone.</p>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-secondary" (click)="setConfirmDelete(null)">Cancel</button>
+              <button class="btn-danger" (click)="confirmAndDelete()">Delete</button>
+            </div>
+          </div>
+        </div>
+      }
+    </div>
+  }
+}

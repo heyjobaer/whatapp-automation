@@ -1,0 +1,106 @@
+@if (vm$ | async; as vm) {
+  @if (vm.loading) {
+    <div class="dashboard" style="display: flex; align-items: center; justify-content: center; min-height: 400px">
+      <lucide-icon name="loader-2" class="animate-spin" [size]="32" />
+    </div>
+  } @else if (vm.error) {
+    <div class="dashboard" style="padding: 2rem">
+      <div style="background: #fee2e2; padding: 1rem; border-radius: 8px; color: #dc2626">
+        {{ 'dashboard.errorPrefix' | translate: { message: vm.error } }}
+      </div>
+    </div>
+  } @else {
+    <div class="dashboard">
+      <app-page-header [title]="'dashboard.title' | translate" [subtitle]="'dashboard.subtitle' | translate">
+        <span badge>
+          <span class="status-badge" [class.connected]="(vm.stats?.ready ?? 0) > 0" [class.disconnected]="(vm.stats?.ready ?? 0) === 0">
+            {{ ((vm.stats?.ready ?? 0) > 0 ? 'common.connected' : 'common.disconnected') | translate }}
+          </span>
+        </span>
+      </app-page-header>
+
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-label">{{ 'dashboard.stats.activeSessions' | translate }}</span>
+            <lucide-icon name="message-square" [size]="20" class="stat-icon" />
+          </div>
+          <div class="stat-value">{{ (vm.stats?.active ?? 0).toLocaleString() }}</div>
+          <div class="stat-trend up">
+            <lucide-icon name="arrow-up-right" [size]="14" />
+            +{{ vm.stats?.ready ?? 0 }}
+          </div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-label">{{ 'dashboard.stats.messagesToday' | translate }}</span>
+            <lucide-icon name="send" [size]="20" class="stat-icon" />
+          </div>
+          <div class="stat-value">{{ vm.messagesToday }}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-label">{{ 'dashboard.stats.webhooksConfigured' | translate }}</span>
+            <lucide-icon name="webhook" [size]="20" class="stat-icon" />
+          </div>
+          <div class="stat-value">{{ vm.webhooks.length.toLocaleString() }}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-label">{{ 'dashboard.stats.totalMessages' | translate }}</span>
+            <lucide-icon name="activity" [size]="20" class="stat-icon" />
+          </div>
+          <div class="stat-value">{{ vm.totalMessages }}</div>
+        </div>
+      </div>
+
+      @defer (on idle) {
+        <app-dashboard-charts />
+      }
+
+      <section class="sessions-section">
+        <div class="section-header">
+          <h2>{{ 'dashboard.sessionsOverview' | translate }}</h2>
+          <span class="section-subtitle">
+            {{ 'dashboard.showingSessions' | translate: { shown: vm.sessions.length, total: vm.stats?.total ?? 0 } }}
+          </span>
+        </div>
+
+        <div class="sessions-table">
+          <div class="table-header">
+            <span>{{ 'dashboard.columns.sessionId' | translate }}</span>
+            <span>{{ 'dashboard.columns.phone' | translate }}</span>
+            <span>{{ 'dashboard.columns.status' | translate }}</span>
+            <span>{{ 'dashboard.columns.lastActive' | translate }}</span>
+            <span>{{ 'dashboard.columns.actions' | translate }}</span>
+          </div>
+          @if (vm.sessions.length === 0) {
+            <div class="table-row" style="justify-content: center; color: var(--text-muted)">
+              {{ 'dashboard.noSessions' | translate }}
+            </div>
+          } @else {
+            @for (session of vm.sessions; track session.id) {
+              <div class="table-row">
+                <div class="session-info-cell">
+                  <span class="session-id">{{ session.id.substring(0, 12) }}</span>
+                  <span class="session-name" [title]="session.name">{{ session.name }}</span>
+                </div>
+                <span class="phone">{{ session.phone || '—' }}</span>
+                <span class="status-pill {{ session.status }}">{{ formatStatus(session.status) }}</span>
+                <span class="last-active">{{ formatLastActive(session.lastActive) }}</span>
+                <div class="actions">
+                  <button class="btn-sm" (click)="goToSessions()">{{ 'dashboard.view' | translate }}</button>
+                  @if (canDisconnect(session.status)) {
+                    <button class="btn-sm danger" (click)="disconnect(session.id)">
+                      {{ 'dashboard.disconnect' | translate }}
+                    </button>
+                  }
+                </div>
+              </div>
+            }
+          }
+        </div>
+      </section>
+    </div>
+  }
+}

@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs';
 const root = new URL('../', import.meta.url);
 const read = (rel) => readFileSync(new URL(rel, root), 'utf8');
 
-const version = JSON.parse(read('package.json')).version;
+const version = JSON.parse(read('backend/package.json')).version;
 const errors = [];
 
 // 1) README badges must be dynamic, not a pinned `badge/version-x`.
@@ -30,8 +30,8 @@ for (const f of ['README.md', 'docs/README.md']) {
 }
 
 // 2) Swagger version must come from package.json, not a literal.
-if (/setVersion\(\s*['"]\d/.test(read('src/config/swagger.config.ts'))) {
-  errors.push("src/config/swagger.config.ts: hardcoded setVersion('x.y.z') — use require('../../package.json').version.");
+if (/setVersion\(\s*['"]\d/.test(read('backend/src/config/swagger.config.ts'))) {
+  errors.push("backend/src/config/swagger.config.ts: hardcoded setVersion('x.y.z') — use require('../../package.json').version.");
 }
 
 // 3) CHANGELOG must have an entry for the current version.

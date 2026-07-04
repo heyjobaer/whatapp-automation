@@ -1,0 +1,395 @@
+@if (vm$ | async; as vm) {
+  @if (vm.loading) {
+    <div class="sessions-page" style="display: flex; align-items: center; justify-content: center; min-height: 400px">
+      <lucide-icon name="loader-2" class="animate-spin" [size]="32" />
+    </div>
+  } @else {
+    <div class="sessions-page">
+      <app-page-header [title]="'sessions.title' | translate" [subtitle]="'sessions.subtitle' | translate">
+        <div actions>
+          @if (vm.canWrite) {
+            <button class="btn-primary" (click)="setShowCreateModal(true)">
+              <lucide-icon name="plus" [size]="18" />
+              {{ 'sessions.newSession' | translate }}
+            </button>
+          }
+        </div>
+      </app-page-header>
+
+      <div class="filters-bar">
+        <div class="search-input">
+          <lucide-icon name="search" [size]="18" />
+          <input
+            type="text"
+            [placeholder]="'sessions.searchPlaceholder' | translate"
+            [ngModel]="vm.searchQuery"
+            (ngModelChange)="setSearchQuery($event)"
+          />
+        </div>
+
+        <div class="filter-group">
+          <lucide-icon name="filter" [size]="16" />
+          <select [ngModel]="vm.statusFilter" (ngModelChange)="setStatusFilter($event)">
+            <option value="all">{{ 'sessions.filter.all' | translate }}</option>
+            <option value="active">{{ 'sessions.filter.active' | translate }}</option>
+            <option value="inactive">{{ 'sessions.filter.inactive' | translate }}</option>
+            <option value="connecting">{{ 'sessions.filter.connecting' | translate }}</option>
+          </select>
+        </div>
+      </div>
+
+      @if (vm.error) {
+        <div style="background: #fee2e2; padding: 1rem; border-radius: 8px; color: #dc2626; margin-bottom: 1rem">
+          {{ vm.error }}
+        </div>
+      }
+
+      @if (vm.showCreateModal) {
+        <div class="modal-overlay" (click)="setShowCreateModal(false)">
+          <div class="modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h2>{{ 'sessions.create.title' | translate }}</h2>
+              <button class="btn-icon" (click)="setShowCreateModal(false)">
+                <lucide-icon name="x" [size]="20" />
+              </button>
+            </div>
+            <div class="modal-body">
+              <label>{{ 'sessions.create.label' | translate }}</label>
+              <input
+                type="text"
+                [placeholder]="'sessions.create.placeholder' | translate"
+                [ngModel]="newSessionName"
+                (ngModelChange)="onNameInput($event)"
+                (keydown.enter)="handleCreate()"
+              />
+              <p class="input-hint" [innerHTML]="'sessions.create.hint' | translate"></p>
+              @if (nameInvalidChars()) {
+                <p class="input-error">{{ 'sessions.create.invalidChars' | translate }}</p>
+              }
+              @if (nameTooLong()) {
+                <p class="input-error">{{ 'sessions.create.tooLong' | translate: { length: newSessionName.length } }}</p>
+              }
+              @if (nameDuplicate()) {
+                <p class="input-error">{{ 'sessions.create.duplicate' | translate }}</p>
+              }
+            </div>
+            <div class="modal-footer">
+              <button class="btn-secondary" (click)="setShowCreateModal(false)">
+                {{ 'common.cancel' | translate }}
+              </button>
+              <button class="btn-primary" (click)="handleCreate()" [disabled]="createDisabled()">
+                @if (vm.creating) {
+                  <lucide-icon name="loader-2" class="animate-spin" [size]="16" />
+                } @else {
+                  {{ 'common.create' | translate }}
+                }
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (vm.qrData; as qr) {
+        <div class="modal-overlay" (click)="closeQrModal()">
+          <div class="modal qr-modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <div class="modal-title">
+                <h2>{{ (vm.pairingMode ? 'sessions.pairing.tabPhone' : 'sessions.qr.title') | translate }}</h2>
+                <span class="session-name">{{ qr.sessionName }}</span>
+              </div>
+              <button class="btn-close" (click)="closeQrModal()" [attr.aria-label]="'common.close' | translate">
+                <lucide-icon name="x" [size]="20" />
+              </button>
+            </div>
+            <div class="modal-body" style="text-align: center">
+              @if (!vm.pairingCode) {
+                <div class="pairing-tabs" role="tablist">
+                  <button
+                    role="tab"
+                    [attr.aria-selected]="!vm.pairingMode"
+                    class="pairing-tab-btn"
+                    [class.active]="!vm.pairingMode"
+                    (click)="setPairingMode(false)"
+                  >
+                    {{ 'sessions.pairing.tabQr' | translate }}
+                  </button>
+                  <button
+                    role="tab"
+                    [attr.aria-selected]="vm.pairingMode"
+                    class="pairing-tab-btn"
+                    [class.active]="vm.pairingMode"
+                    (click)="setPairingMode(true)"
+                  >
+                    {{ 'sessions.pairing.tabPhone' | translate }}
+                  </button>
+                </div>
+              }
+
+              @if (!vm.pairingMode) {
+                @if (qr.qrCode) {
+                  <img [src]="qr.qrCode" alt="QR" style="max-width: 280px; border-radius: 12px" />
+                  <div class="qr-instructions">
+                    <p class="qr-step" [innerHTML]="'sessions.qr.step1' | translate"></p>
+                    <p class="qr-step" [innerHTML]="'sessions.qr.step2' | translate"></p>
+                    <p class="qr-step" [innerHTML]="'sessions.qr.step3' | translate"></p>
+                  </div>
+                  <p class="qr-auto-refresh">
+                    <lucide-icon name="refresh-cw" [size]="14" class="spin-slow" />
+                    {{ 'sessions.qr.autoRefresh' | translate }}
+                  </p>
+                } @else {
+                  <div style="padding: 2rem">
+                    <lucide-icon name="loader-2" class="animate-spin" [size]="48" />
+                    <p>{{ 'sessions.qr.generating' | translate }}</p>
+                  </div>
+                }
+              } @else {
+                <div class="pairing-container" role="tabpanel">
+                  @if (vm.pairingError) {
+                    <div class="pairing-error">{{ vm.pairingError }}</div>
+                  }
+
+                  @if (!vm.pairingCode) {
+                    <div class="pairing-form">
+                      <label for="pairing-phone" class="pairing-label">
+                        {{ 'sessions.pairing.phoneLabel' | translate }}
+                      </label>
+                      <input
+                        id="pairing-phone"
+                        class="pairing-input"
+                        type="tel"
+                        inputmode="numeric"
+                        maxlength="15"
+                        [placeholder]="'sessions.pairing.phonePlaceholder' | translate"
+                        [ngModel]="phoneNumber"
+                        (ngModelChange)="onPhoneInput($event)"
+                        (keydown.enter)="handleGeneratePairingCode()"
+                      />
+                      <p class="input-hint" style="margin-bottom: 1.5rem">
+                        {{ 'sessions.pairing.phoneHint' | translate }}
+                      </p>
+                      <button
+                        class="btn-primary"
+                        (click)="handleGeneratePairingCode()"
+                        [disabled]="vm.requestingPairing || !phoneValid()"
+                        style="width: 100%; justify-content: center"
+                      >
+                        @if (vm.requestingPairing) {
+                          <lucide-icon name="loader-2" class="animate-spin" [size]="16" />
+                          <span style="margin-left: 0.5rem">{{ 'sessions.pairing.generating' | translate }}</span>
+                        } @else {
+                          {{ 'sessions.pairing.generateButton' | translate }}
+                        }
+                      </button>
+                    </div>
+                  } @else {
+                    <label style="display: block; font-weight: 600; color: var(--text-secondary)">
+                      {{ 'sessions.pairing.codeLabel' | translate }}
+                    </label>
+                    <div class="pairing-code-display">{{ formattedPairingCode() }}</div>
+
+                    <div class="qr-instructions">
+                      <p class="pairing-instructions-title">{{ 'sessions.pairing.instructions' | translate }}</p>
+                      <p class="qr-step" [innerHTML]="'sessions.pairing.step1' | translate"></p>
+                      <p class="qr-step" [innerHTML]="'sessions.pairing.step2' | translate"></p>
+                      <p class="qr-step" [innerHTML]="'sessions.pairing.step3' | translate"></p>
+                      <p class="qr-step" [innerHTML]="'sessions.pairing.step4' | translate"></p>
+                    </div>
+
+                    <div style="margin-top: 1.5rem">
+                      <button class="btn-secondary" (click)="changePairingNumber()" style="width: 100%">
+                        {{ 'sessions.pairing.changeNumber' | translate }}
+                      </button>
+                    </div>
+
+                    <p class="qr-auto-refresh">
+                      <lucide-icon name="refresh-cw" [size]="14" class="spin-slow" />
+                      {{ 'sessions.pairing.waitingConnection' | translate }}
+                    </p>
+                  }
+                </div>
+              }
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (vm.selectedSession; as selected) {
+        <div class="modal-overlay" (click)="setSelectedSession(null)">
+          <div class="modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h2>{{ 'sessions.details.title' | translate }}</h2>
+              <button class="btn-icon" (click)="setSelectedSession(null)">
+                <lucide-icon name="x" [size]="20" />
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="detail-grid">
+                <div class="detail-item">
+                  <span class="detail-label">{{ 'sessions.details.name' | translate }}</span>
+                  <span class="detail-value">{{ selected.name }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">{{ 'sessions.details.status' | translate }}</span>
+                  <span class="status-badge {{ selected.status }}">{{ formatStatus(selected.status) }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">{{ 'sessions.details.sessionId' | translate }}</span>
+                  <span class="detail-value mono">{{ selected.id }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">{{ 'sessions.details.phone' | translate }}</span>
+                  <span class="detail-value">{{ selected.phone || ('sessions.details.phoneNone' | translate) }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">{{ 'sessions.details.created' | translate }}</span>
+                  <span class="detail-value">{{ selected.createdAt | date: 'medium' }}</span>
+                </div>
+                <div class="detail-item">
+                  <span class="detail-label">{{ 'sessions.details.lastActive' | translate }}</span>
+                  <span class="detail-value">
+                    {{ selected.lastActive ? (selected.lastActive | date: 'medium') : ('common.never' | translate) }}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-secondary" (click)="setSelectedSession(null)">{{ 'common.close' | translate }}</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (vm.deleteConfirmId; as deleteId) {
+        <div class="modal-overlay" (click)="setDeleteConfirmId(null)">
+          <div class="modal confirm-modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h2>{{ 'sessions.delete.title' | translate }}</h2>
+              <button class="btn-icon" (click)="setDeleteConfirmId(null)">
+                <lucide-icon name="x" [size]="20" />
+              </button>
+            </div>
+            <div class="modal-body">
+              <p [innerHTML]="'sessions.delete.message' | translate: { name: vm.deleteConfirmName }"></p>
+              <p class="text-muted">{{ 'sessions.delete.warning' | translate }}</p>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-secondary" (click)="setDeleteConfirmId(null)">{{ 'common.cancel' | translate }}</button>
+              <button class="btn-danger" (click)="handleDelete(deleteId)">{{ 'common.delete' | translate }}</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (vm.killConfirmId; as killId) {
+        <div class="modal-overlay" (click)="setKillConfirmId(null)">
+          <div class="modal confirm-modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h2>{{ 'sessions.forceKill.title' | translate }}</h2>
+              <button class="btn-icon" (click)="setKillConfirmId(null)">
+                <lucide-icon name="x" [size]="20" />
+              </button>
+            </div>
+            <div class="modal-body">
+              <p [innerHTML]="'sessions.forceKill.message' | translate: { name: vm.killConfirmName }"></p>
+              <p class="text-muted">{{ 'sessions.forceKill.warning' | translate }}</p>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-secondary" (click)="setKillConfirmId(null)">{{ 'common.cancel' | translate }}</button>
+              <button class="btn-danger" (click)="handleForceKill(killId)">
+                {{ 'sessions.forceKill.confirm' | translate }}
+              </button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <div class="sessions-grid">
+        @if (vm.filteredSessions.length === 0) {
+          <div class="empty-state">
+            <lucide-icon name="qr-code" [size]="48" />
+            <h3>{{ 'sessions.empty.title' | translate }}</h3>
+            <p>{{ 'sessions.empty.description' | translate }}</p>
+          </div>
+        } @else {
+          @for (session of vm.filteredSessions; track session.id) {
+            <div class="session-card">
+              <div class="card-header">
+                <h3 [title]="session.name">{{ session.name }}</h3>
+                <span class="status-pill {{ session.status }}">{{ formatStatus(session.status) }}</span>
+              </div>
+
+              @if (isConnecting(session.status)) {
+                <div class="qr-placeholder">
+                  <lucide-icon name="qr-code" [size]="80" class="qr-icon" />
+                  <p>
+                    {{ (session.status === 'qr_ready' ? 'sessions.qr.scanToConnect' : 'sessions.qr.preparing') | translate }}
+                  </p>
+                  <button class="btn-sm" (click)="handleShowQR(session.id)" [disabled]="session.status !== 'qr_ready'">
+                    {{ (session.status === 'qr_ready' ? 'sessions.qr.showQr' : 'sessions.qr.loading') | translate }}
+                  </button>
+                </div>
+              } @else {
+                <div class="session-info">
+                  <div class="info-row">
+                    <span class="info-label">{{ 'sessions.card.phone' | translate }}</span>
+                    <span class="info-value">{{ session.phone || '—' }}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label">{{ 'sessions.card.sessionId' | translate }}</span>
+                    <span class="info-value mono">{{ session.id.substring(0, 12) }}</span>
+                  </div>
+                  <div class="info-row">
+                    <span class="info-label">{{ 'sessions.card.lastActive' | translate }}</span>
+                    <span class="info-value">{{ formatLastActive(session.lastActive) }}</span>
+                  </div>
+                  @if (session.status === 'failed' && session.lastError) {
+                    <div class="info-row session-error">
+                      <span class="info-label">{{ 'sessions.card.error' | translate }}</span>
+                      <span class="info-value error-text" [title]="session.lastError">{{ session.lastError }}</span>
+                    </div>
+                  }
+                </div>
+              }
+
+              <div class="card-actions">
+                <button class="btn-action" (click)="setSelectedSession(session)">
+                  <lucide-icon name="eye" [size]="16" />
+                  {{ 'sessions.actions.view' | translate }}
+                </button>
+                @if (vm.canWrite && isStartable(session.status)) {
+                  <button class="btn-action" (click)="handleStart(session.id)">
+                    <lucide-icon name="play" [size]="16" />
+                    {{ 'sessions.actions.start' | translate }}
+                  </button>
+                } @else if (vm.canWrite && isStoppable(session.status)) {
+                  <button class="btn-action" (click)="handleStop(session.id)">
+                    <lucide-icon name="square" [size]="16" />
+                    {{ 'sessions.actions.stop' | translate }}
+                  </button>
+                } @else if (vm.canWrite) {
+                  <button class="btn-action" (click)="handleStart(session.id)">
+                    <lucide-icon name="refresh-cw" [size]="16" />
+                    {{ 'sessions.actions.reconnect' | translate }}
+                  </button>
+                }
+                @if (vm.canWrite) {
+                  <button class="btn-action danger" (click)="setDeleteConfirmId(session.id)">
+                    <lucide-icon name="trash-2" [size]="16" />
+                    {{ 'sessions.actions.delete' | translate }}
+                  </button>
+                }
+                @if (vm.canWrite && session.status === 'failed') {
+                  <button class="btn-action danger" (click)="setKillConfirmId(session.id)">
+                    <lucide-icon name="skull" [size]="16" />
+                    {{ 'sessions.actions.killStuck' | translate }}
+                  </button>
+                }
+              </div>
+            </div>
+          }
+        }
+      </div>
+    </div>
+  }
+}

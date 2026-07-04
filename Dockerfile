@@ -20,27 +20,32 @@ RUN apt-get update && apt-get install -y \
     g++ \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy package files
-COPY package*.json ./
+# Copy backend package files. The repo is split into backend/ (NestJS API) and frontend/
+# (Angular dashboard); the build context is still the repo root.
+COPY backend/package*.json ./backend/
 
-# Install all dependencies INCLUDING devDependencies — the build needs them (`nest` from
-# @nestjs/cli, plus `vite`/`typescript` for the dashboard). `--include=dev` is REQUIRED, not
-# cosmetic: npm omits devDependencies whenever NODE_ENV=production is present in the build env.
-# Coolify (and similar PaaS) promote every ${VAR} referenced in the compose file to a build-time
-# variable, so docker-compose.yml's `NODE_ENV=${NODE_ENV:-production}` leaks NODE_ENV=production
-# into this stage and a bare `npm ci` would skip @nestjs/cli → `sh: 1: nest: not found` (exit 127).
-# (docker-compose.dev.yml hardcodes NODE_ENV=development, which is why the dev build never hit this.)
-RUN npm ci --include=dev
+# Install the backend deps INCLUDING devDependencies — the build needs them (`nest` from
+# @nestjs/cli). `--include=dev` is REQUIRED, not cosmetic: npm omits devDependencies whenever
+# NODE_ENV=production is present in the build env. Coolify (and similar PaaS) promote every ${VAR}
+# referenced in the compose file to a build-time variable, so docker-compose.yml's
+# `NODE_ENV=${NODE_ENV:-production}` leaks NODE_ENV=production into this stage and a bare `npm ci`
+# would skip @nestjs/cli → `sh: 1: nest: not found` (exit 127). (docker-compose.dev.yml hardcodes
+# NODE_ENV=development, which is why the dev build never hit this.)
+# This runs before frontend/ is copied, so backend's postinstall hook (which installs the
+# dashboard when ../frontend exists) is a no-op here — the dashboard deps are installed explicitly below.
+RUN cd backend && npm ci --include=dev
 
-# Copy source code
+# Install the frontend (Angular dashboard) deps. `--include=dev` for the same NODE_ENV reason as
+# above: the dashboard build needs vite/typescript (devDependencies).
+COPY frontend/package*.json ./frontend/
+RUN cd frontend && npm ci --include=dev
+
+# Copy the rest of the source
 COPY . .
 
-# Build the API (dist/) and the dashboard SPA (dashboard/dist/). The root `npm ci` above
-# ran before the dashboard source was copied, so its postinstall hook skipped the dashboard
-# deps - install them explicitly here (npm ci, reproducible from dashboard/package-lock.json).
-# `--include=dev` for the same reason as above: the dashboard build needs vite/typescript
-# (devDependencies), which a NODE_ENV=production build env would otherwise omit.
-RUN npm run build && npm run dashboard:ci -- --include=dev && npm run dashboard:build
+# Build the API (backend/dist/) and the Angular dashboard SPA (frontend/dist/dashboard-ng/browser).
+RUN cd backend && npm run build
+RUN cd frontend && npm run build
 
 # ===== Stage 2: Production =====
 FROM docker.io/node:22-slim AS production
@@ -80,18 +85,20 @@ RUN groupadd -r openwa && useradd -r -g openwa openwa
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy backend package files
+COPY backend/package*.json ./backend/
 
-# Install production dependencies only
-RUN npm ci --omit=dev && npm cache clean --force
+# Install backend production dependencies only. postinstall's dashboard hook is a no-op here
+# (../frontend does not exist in this stage — the built SPA is copied in below).
+RUN cd backend && npm ci --omit=dev && npm cache clean --force
 
-# Copy built application from builder stage
-COPY --from=builder /app/dist ./dist
+# Copy the built API from the builder stage
+COPY --from=builder /app/backend/dist ./backend/dist
 
-# Copy the bundled dashboard SPA; ServeStaticModule serves it from this same process/port
-# (app.module.ts resolves dashboard/dist relative to dist/). Single container, single port.
-COPY --from=builder /app/dashboard/dist ./dashboard/dist
+# Copy the bundled Angular dashboard SPA; ServeStaticModule serves it from this same process/port.
+# app.module.ts resolves ../../frontend/dist/dashboard-ng/browser relative to backend/dist/, which
+# is /app/frontend/dist/dashboard-ng/browser here. Single container, single port.
+COPY --from=builder /app/frontend/dist ./frontend/dist
 
 # Create data directories with correct ownership
 RUN mkdir -p ./data/sessions ./data/media && \
@@ -123,4 +130,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
 # It execs docker-entrypoint.sh (as root), which fixes volume ownership and
 # then drops to the openwa user via gosu before starting the node process.
 ENTRYPOINT ["dumb-init", "--", "/usr/local/bin/docker-entrypoint.sh"]
-CMD ["node", "dist/main"]
+CMD ["node", "backend/dist/main"]

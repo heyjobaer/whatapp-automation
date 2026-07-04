@@ -1,0 +1,279 @@
+@if (vm$ | async; as vm) {
+  @if (vm.loading) {
+    <div class="webhooks-page" style="display: flex; align-items: center; justify-content: center; min-height: 400px">
+      <lucide-icon name="loader-2" class="animate-spin" [size]="32" />
+    </div>
+  } @else {
+    <div class="webhooks-page">
+      @if (vm.toast; as t) {
+        <div class="toast {{ t.type }}">
+          <lucide-icon [name]="t.type === 'success' ? 'check' : 'alert-triangle'" [size]="18" />
+          <span>{{ t.message }}</span>
+          <button class="toast-close" (click)="clearToast()">
+            <lucide-icon name="x" [size]="16" />
+          </button>
+        </div>
+      }
+
+      <app-page-header [title]="'webhooks.title' | translate" [subtitle]="'webhooks.subtitle' | translate">
+        <div actions>
+          @if (vm.canWrite) {
+            <button class="btn-primary" (click)="setShowCreateModal(true)">
+              <lucide-icon name="plus" [size]="18" />
+              {{ 'webhooks.addWebhook' | translate }}
+            </button>
+          }
+        </div>
+      </app-page-header>
+
+      @if (vm.webhooksError) {
+        <div class="error-banner" role="alert">
+          <lucide-icon name="alert-circle" [size]="20" />
+          <span class="error-banner-text">{{ 'dashboard.loadError' | translate }}</span>
+        </div>
+      }
+
+      @if (vm.showCreateModal) {
+        <div class="modal-overlay" (click)="setShowCreateModal(false)">
+          <div class="modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h2>{{ 'webhooks.createTitle' | translate }}</h2>
+              <button class="btn-icon" (click)="setShowCreateModal(false)">
+                <lucide-icon name="x" [size]="20" />
+              </button>
+            </div>
+            <div class="modal-body">
+              <label>{{ 'webhooks.session' | translate }}</label>
+              <select [ngModel]="vm.newWebhook.sessionId" (ngModelChange)="patchNewWebhook({ sessionId: $event })">
+                <option value="">{{ 'webhooks.selectSession' | translate }}</option>
+                @for (s of vm.sessions; track s.id) {
+                  <option [value]="s.id">{{ s.name }}</option>
+                }
+              </select>
+              <label>{{ 'common.url' | translate }}</label>
+              <input
+                type="url"
+                placeholder="https://..."
+                [ngModel]="vm.newWebhook.url"
+                (ngModelChange)="patchNewWebhook({ url: $event })"
+              />
+              <label>{{ 'webhooks.events' | translate }}</label>
+              <div class="event-tags">
+                @for (name of availableEventNames; track name) {
+                  <button
+                    type="button"
+                    class="event-tag"
+                    [class.selected]="vm.newWebhook.events.includes(name)"
+                    (click)="toggleNewEvent(name)"
+                  >
+                    {{ name }}
+                  </button>
+                }
+              </div>
+              @if (supportsFilters(vm.newWebhook.events)) {
+                <app-filter-builder
+                  [filters]="vm.newWebhook.filters"
+                  [chats]="vm.chats"
+                  (filtersChange)="patchNewWebhook({ filters: $event })"
+                />
+              }
+            </div>
+            <div class="modal-footer">
+              <button class="btn-secondary" (click)="setShowCreateModal(false)">{{ 'common.cancel' | translate }}</button>
+              <button class="btn-primary" (click)="handleCreate()">{{ 'common.create' | translate }}</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (vm.showEditModal && vm.editWebhook; as edit) {
+        <div class="modal-overlay" (click)="setShowEditModal(false)">
+          <div class="modal" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h2>{{ 'webhooks.editTitle' | translate }}</h2>
+              <button class="btn-icon" (click)="setShowEditModal(false)">
+                <lucide-icon name="x" [size]="20" />
+              </button>
+            </div>
+            <div class="modal-body">
+              <label>{{ 'common.url' | translate }}</label>
+              <input type="url" [ngModel]="edit.url" (ngModelChange)="patchEditWebhook({ url: $event })" />
+              <label>{{ 'webhooks.events' | translate }}</label>
+              <div class="event-tags">
+                @for (name of availableEventNames; track name) {
+                  <button
+                    type="button"
+                    class="event-tag"
+                    [class.selected]="edit.events.includes(name)"
+                    (click)="toggleEditEvent(name)"
+                  >
+                    {{ name }}
+                  </button>
+                }
+              </div>
+              @if (supportsFilters(edit.events)) {
+                <app-filter-builder
+                  [filters]="edit.filters"
+                  [chats]="vm.chats"
+                  (filtersChange)="patchEditWebhook({ filters: $event })"
+                />
+              }
+              <div class="toggle-group">
+                <span class="toggle-label">{{ 'common.status' | translate }}</span>
+                <label class="toggle-switch">
+                  <input type="checkbox" [ngModel]="edit.active" (ngModelChange)="patchEditWebhook({ active: $event })" />
+                  <span class="toggle-slider"></span>
+                </label>
+                <span class="toggle-status" [class.active]="edit.active" [class.inactive]="!edit.active">
+                  {{ (edit.active ? 'common.active' : 'common.inactive') | translate }}
+                </span>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-secondary" (click)="setShowEditModal(false)">{{ 'common.cancel' | translate }}</button>
+              <button class="btn-primary" (click)="handleEdit()">{{ 'webhooks.saveChanges' | translate }}</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      @if (vm.showDeleteModal && vm.deleteTarget; as target) {
+        <div class="modal-overlay" (click)="setShowDeleteModal(false)">
+          <div class="modal modal-sm" (click)="$event.stopPropagation()">
+            <div class="modal-header">
+              <h2>{{ 'webhooks.deleteTitle' | translate }}</h2>
+              <button class="btn-icon" (click)="setShowDeleteModal(false)">
+                <lucide-icon name="x" [size]="20" />
+              </button>
+            </div>
+            <div class="modal-body">
+              <p>{{ 'webhooks.deleteConfirm' | translate }}</p>
+              <code
+                style="display: block; margin-top: 0.5rem; padding: 0.5rem; background: var(--color-bg-secondary); border-radius: 4px; font-size: 0.85rem; word-break: break-all"
+              >
+                {{ target.url }}
+              </code>
+            </div>
+            <div class="modal-footer">
+              <button class="btn-secondary" (click)="setShowDeleteModal(false)">{{ 'common.cancel' | translate }}</button>
+              <button class="btn-danger" (click)="handleDelete()">{{ 'common.delete' | translate }}</button>
+            </div>
+          </div>
+        </div>
+      }
+
+      <div class="webhooks-content">
+        <div class="webhooks-list-container">
+          @if (vm.webhooks.length === 0) {
+            <div class="empty-table-state">
+              <lucide-icon name="webhook" [size]="48" [strokeWidth]="1" />
+              <h3>{{ 'webhooks.empty.title' | translate }}</h3>
+              <p>{{ 'webhooks.empty.description' | translate }}</p>
+            </div>
+          } @else {
+            <div class="webhooks-card-list">
+              @for (webhook of vm.webhooks; track webhook.id) {
+                <div class="webhook-card">
+                  <div class="webhook-card-header">
+                    <div class="webhook-url-row">
+                      <lucide-icon name="link" [size]="16" class="webhook-url-icon" />
+                      <code class="webhook-url">{{ webhook.url }}</code>
+                    </div>
+                    <div class="webhook-card-actions">
+                      <button
+                        class="icon-btn"
+                        [title]="'webhooks.actions.test' | translate"
+                        (click)="handleTest(webhook.sessionId, webhook.id)"
+                        [disabled]="vm.testingId === webhook.id"
+                      >
+                        <lucide-icon
+                          [name]="vm.testingId === webhook.id ? 'loader-2' : 'play'"
+                          [size]="16"
+                          [class.animate-spin]="vm.testingId === webhook.id"
+                        />
+                      </button>
+                      @if (vm.canWrite) {
+                        <button class="icon-btn" [title]="'webhooks.actions.edit' | translate" (click)="openEdit(webhook)">
+                          <lucide-icon name="edit-2" [size]="16" />
+                        </button>
+                        <button
+                          class="icon-btn danger"
+                          [title]="'webhooks.actions.delete' | translate"
+                          (click)="confirmDelete(webhook.sessionId, webhook.id, webhook.url)"
+                        >
+                          <lucide-icon name="trash-2" [size]="16" />
+                        </button>
+                      }
+                    </div>
+                  </div>
+                  <div class="webhook-card-body">
+                    <div class="webhook-meta">
+                      <div class="webhook-meta-item">
+                        <span class="webhook-meta-label">{{ 'webhooks.columns.session' | translate }}</span>
+                        <span class="webhook-meta-value">{{ sessionName(webhook.sessionId) }}</span>
+                      </div>
+                      <div class="webhook-meta-item">
+                        <span class="webhook-meta-label">{{ 'webhooks.columns.status' | translate }}</span>
+                        <span class="status-badge" [class.active]="webhook.active" [class.inactive]="!webhook.active">
+                          {{ (webhook.active ? 'common.active' : 'common.inactive') | translate }}
+                        </span>
+                      </div>
+                    </div>
+                    <div class="webhook-events">
+                      <span class="webhook-meta-label">{{ 'webhooks.columns.events' | translate }}</span>
+                      <div class="events-cell">
+                        @for (event of webhook.events; track event) {
+                          <span class="event-tag">{{ event }}</span>
+                        }
+                        @if (webhook.filters?.conditions?.length) {
+                          <span
+                            class="filter-badge filter-badge-interactive"
+                            tabindex="0"
+                            (mouseenter)="openPopover(webhook.id, $event.currentTarget)"
+                            (mouseleave)="closePopover()"
+                            (focus)="openPopover(webhook.id, $event.currentTarget)"
+                            (blur)="closePopover()"
+                          >
+                            <lucide-icon name="filter" [size]="12" />
+                            {{ filterBadgeLabel(webhook.filters!.conditions.length) }}
+                            @if (vm.popover; as pop) {
+                              @if (pop.webhookId === webhook.id) {
+                                <div
+                                  class="filter-popover"
+                                  [style.top.px]="pop.top"
+                                  [style.left.px]="pop.left"
+                                  role="tooltip"
+                                >
+                                  <div class="filter-popover-title">{{ 'webhooks.filters.title' | translate }}</div>
+                                  @for (condition of popoverConditions(webhook); track $index) {
+                                    <div class="filter-popover-row">{{ conditionSummary(condition) }}</div>
+                                  }
+                                </div>
+                              }
+                            }
+                          </span>
+                        }
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              }
+            </div>
+          }
+        </div>
+
+        <div class="events-reference">
+          <h3>{{ 'webhooks.available' | translate }}</h3>
+          <div class="events-list">
+            @for (name of availableEventNames; track name) {
+              <div class="event-item">
+                <code>{{ name }}</code>
+                <span>{{ eventDescription(name) }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+}

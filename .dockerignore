@@ -1,19 +1,26 @@
-# Dependencies
+# Dependencies (backend/ and frontend/ each have their own)
 node_modules/
+**/node_modules/
 
 # Build output
 dist/
+**/dist/
 
 # Test coverage
 coverage/
+**/coverage/
 
 # Environment files
 .env
+**/.env
 .env.local
 .env.*.local
+**/.env.local
+**/.env.*.local
 
 # Data files (sessions, media, database)
 data/
+**/data/
 
 # IDE
 .idea/

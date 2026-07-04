@@ -1,0 +1,72 @@
+<div class="login-container">
+  <div class="login-card">
+    <!-- <div class="login-logo">
+      <img src="/openwa_logo.webp" alt="OpenWA" class="logo-icon" />
+      <span class="version-info">
+        {{ 'login.version' | translate: { version: appVersion, date: buildDate } }}
+      </span>
+    </div> -->
+
+    @if (vm$ | async; as vm) {
+      <div class="login-language">
+        <lucide-icon name="languages" [size]="24" />
+        <select
+          [value]="vm.langCurrent"
+          (change)="changeLanguage($any($event.target).value)"
+          [attr.aria-label]="'common.language' | translate"
+        >
+          @for (option of lang.languageOptions; track option.value) {
+            <option [value]="option.value">{{ option.label }}</option>
+          }
+        </select>
+      </div>
+
+      <form (ngSubmit)="handleSubmit()" class="login-form">
+        <div class="input-group">
+          <label for="email">{{ 'login.email' | translate }}</label>
+          <div class="input-wrapper">
+            <input
+              id="email"
+              name="email"
+              type="email"
+              autocomplete="username"
+              [(ngModel)]="email"
+              [placeholder]="'login.emailPlaceholder' | translate"
+              [class.error]="vm.error"
+            />
+          </div>
+        </div>
+
+        <div class="input-group">
+          <label for="password">{{ 'login.password' | translate }}</label>
+          <div class="input-wrapper">
+            <input
+              id="password"
+              name="password"
+              [type]="vm.showPassword ? 'text' : 'password'"
+              autocomplete="current-password"
+              [(ngModel)]="password"
+              [placeholder]="'login.passwordPlaceholder' | translate"
+              [class.error]="vm.error"
+            />
+            <button
+              type="button"
+              class="toggle-visibility"
+              (click)="toggleShowPassword()"
+              [attr.aria-label]="(vm.showPassword ? 'common.hidePassword' : 'common.showPassword') | translate"
+            >
+              <lucide-icon [name]="vm.showPassword ? 'eye-off' : 'eye'" [size]="20" />
+            </button>
+          </div>
+          @if (vm.error) {
+            <span class="error-message">{{ vm.error }}</span>
+          }
+        </div>
+
+        <button type="submit" class="connect-btn" [disabled]="vm.isLoading">
+          {{ (vm.isLoading ? 'login.signingIn' : 'login.signIn') | translate }}
+        </button>
+      </form>
+    }
+  </div>
+</div>
