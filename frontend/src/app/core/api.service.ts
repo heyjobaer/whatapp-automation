@@ -14,6 +14,10 @@ import type {
   MessageResponse,
   MessageStats,
   MessageTemplate,
+  Property,
+  PropertyPage,
+  PropertyPayload,
+  ChatLead,
   SaveConfigPayload,
   SavedConfig,
   SendMediaPayload,
@@ -116,6 +120,8 @@ export class ApiService {
         method: 'POST',
         body: JSON.stringify({ chatId }),
       }),
+    // AI lead-qualification state for every chat in the session (Hot/Warm/Cold marking).
+    getLeads: (id: string) => request<ChatLead[]>(`/sessions/${id}/leads`),
     getChatMessages: (id: string, chatId: string, limit = 100) =>
       request<{ messages: ChatMessage[]; total: number }>(
         `/sessions/${id}/messages?chatId=${encodeURIComponent(chatId)}&limit=${limit}`,
@@ -281,5 +287,24 @@ export class ApiService {
   readonly stats = {
     getOverview: () => request<OverviewStats>('/stats/overview'),
     getMessages: (period: StatsPeriod) => request<MessageStats>(`/stats/messages?period=${period}`),
+  };
+
+  /** Real-estate "product list" CRUD (ported from the AI-automation project). */
+  readonly properties = {
+    list: (params?: { limit?: number; offset?: number; search?: string }) => {
+      const query = new URLSearchParams();
+      if (params?.limit != null) query.set('limit', String(params.limit));
+      if (params?.offset != null) query.set('offset', String(params.offset));
+      if (params?.search) query.set('search', params.search);
+      const queryStr = query.toString();
+      return request<PropertyPage>(`/properties${queryStr ? `?${queryStr}` : ''}`);
+    },
+    get: (id: string) => request<Property>(`/properties/${id}`),
+    create: (data: PropertyPayload) => request<Property>('/properties', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<PropertyPayload>) =>
+      request<Property>(`/properties/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    setStatus: (id: string, status: string) =>
+      request<Property>(`/properties/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    delete: (id: string) => request<void>(`/properties/${id}`, { method: 'DELETE' }),
   };
 }

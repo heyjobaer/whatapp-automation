@@ -18,7 +18,7 @@ import {
   type ChatMessageView,
 } from '../../shared/utils/chatMessages';
 import { decideScroll, type ScrollDirection } from '../../shared/utils/scrollDecision';
-import { asMessageType, type Chat, type MessageType, type Session } from '../../core/api.types';
+import { asMessageType, type Chat, type ChatLead, type MessageType, type Session } from '../../core/api.types';
 
 type MessageMedia = { mimetype: string; filename?: string; data?: string; omitted?: boolean; sizeBytes?: number };
 
@@ -100,6 +100,9 @@ export class ChatsComponent implements OnInit, OnDestroy {
   );
   readonly previewUrl$ = new BehaviorSubject<string | null>(null);
 
+  // AI lead qualification per chat, keyed by chatId (drives the Hot/Warm badges).
+  readonly leads$ = new BehaviorSubject<Record<string, ChatLead>>({});
+
   @ViewChild('fileInput') private fileInputRef?: ElementRef<HTMLInputElement>;
   @ViewChild('messagesContainer') private messagesContainerRef?: ElementRef<HTMLDivElement>;
 
@@ -140,6 +143,7 @@ export class ChatsComponent implements OnInit, OnDestroy {
       imageMedia: this.imageMedia$,
       searchQuery: this.searchQuery$,
       canWrite: this.auth.canWrite$,
+      leads: this.leads$,
     }),
   );
 
@@ -170,6 +174,7 @@ export class ChatsComponent implements OnInit, OnDestroy {
     this.selectedSessionId$.pipe(takeUntil(this.destroy$)).subscribe(sessionId => {
       if (!sessionId) return;
       void this.loadChats(sessionId);
+      void this.loadLeads(sessionId);
       this.activeChat$.next(null);
       this.removeAttachment();
       this.messages$.next([]);
@@ -213,6 +218,20 @@ export class ChatsComponent implements OnInit, OnDestroy {
         alt: m.body || m.metadata?.media?.filename || '',
         timestamp: this.formatChatTime(m.timestamp || Math.floor(new Date(m.createdAt).getTime() / 1000)),
       }));
+  }
+
+  private async loadLeads(sessionId: string): Promise<void> {
+    try {
+      const list = await this.api.sessions.getLeads(sessionId);
+      this.leads$.next(Object.fromEntries(list.map(l => [l.chatId, l])));
+    } catch {
+      // Leads are non-critical (e.g. AI not enabled) — leave the map empty on failure.
+    }
+  }
+
+  /** Hot ≥ 70, Warm ≥ 40, otherwise Cold. Used for the lead badge in the list + room header. */
+  leadStatus(score: number): 'hot' | 'warm' | 'cold' {
+    return score >= 70 ? 'hot' : score >= 40 ? 'warm' : 'cold';
   }
 
   // ── Template setters ──
@@ -376,6 +395,9 @@ export class ChatsComponent implements OnInit, OnDestroy {
       this.markChatRead(activeChat.id);
       if (!newMsg.fromMe) this.onMessageAppended('incoming');
     }
+
+    // A customer message re-scores the lead server-side (after the AI replies) — refresh the badges.
+    if (!newMsg.fromMe) void this.loadLeads(sessionId);
 
     // Update sidebar chat list.
     const prevChats = this.chats$.value;

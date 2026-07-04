@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { AiService } from './ai.service';
 import { LLM_PROVIDER, LlmProvider } from './providers/llm-provider';
 import { GroqProvider } from './providers/groq.provider';
+import { PropertiesModule } from '../properties/properties.module';
+import { LeadsModule } from '../leads/leads.module';
 
 // Picks the LLM provider from the `AI` env var (defaults to groq).
 const llmProvider = {
@@ -22,6 +24,7 @@ const llmProvider = {
 };
 
 @Module({
+  imports: [PropertiesModule, LeadsModule],
   providers: [AiService, llmProvider],
   exports: [AiService],
 })

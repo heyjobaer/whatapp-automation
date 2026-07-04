@@ -323,3 +323,65 @@ export interface MessageStats {
   bySession: Array<{ sessionId: string; name: string; sent: number; received: number }>;
   topChats: Array<{ chatId: string; messageCount: number }>;
 }
+
+// ── Properties (real-estate "product list", ported from the AI-automation project) ──
+export type PropertyStatus = 'available' | 'reserved' | 'sold';
+
+export interface Property {
+  id: string;
+  name: string;
+  area: string;
+  type: string;
+  bedrooms: number;
+  priceAed: number;
+  priceUsd: number;
+  roiPercent: number;
+  status: PropertyStatus;
+  handoverDate?: string | null;
+  isOffplan: boolean;
+  developer?: string | null;
+  description?: string | null;
+  brochureUrl?: string | null;
+  imageUrl?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface PropertyPage {
+  data: Property[];
+  total: number;
+}
+
+/** Create/update payload — the server fills id/timestamps and defaults. */
+export interface PropertyPayload {
+  name: string;
+  area: string;
+  type: string;
+  bedrooms?: number;
+  priceAed?: number;
+  priceUsd: number;
+  roiPercent?: number;
+  status?: PropertyStatus;
+  handoverDate?: string | null;
+  isOffplan?: boolean;
+  developer?: string | null;
+  description?: string | null;
+  brochureUrl?: string | null;
+  imageUrl?: string | null;
+}
+
+// ── AI lead qualification (per session+chat, powers the Hot/Warm/Cold marking) ──
+export interface ChatLead {
+  id: string;
+  sessionId: string;
+  chatId: string;
+  name?: string | null;
+  language: string;
+  budget?: string | null;
+  purpose?: string | null;
+  propType?: string | null;
+  isLead: boolean;
+  leadScore: number;
+  createdAt?: string;
+  updatedAt?: string;
+}

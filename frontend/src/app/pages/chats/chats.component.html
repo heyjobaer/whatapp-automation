@@ -70,6 +70,11 @@
                   <div class="chat-item-info">
                     <div class="chat-item-top">
                       <span class="chat-item-name" [title]="chat.name || chat.id">{{ chatDisplayName(chat) }}</span>
+                      @if (vm.leads[chat.id]; as lead) {
+                        @if (lead.leadScore >= 40) {
+                          <span class="lead-badge {{ leadStatus(lead.leadScore) }}">{{ leadStatus(lead.leadScore) }}</span>
+                        }
+                      }
                       @if (chat.timestamp) {
                         <span class="chat-item-time">{{ formatChatTime(chat.timestamp) }}</span>
                       }
@@ -108,6 +113,13 @@
                   <h3>{{ chatDisplayName(chat) }}</h3>
                   <span>{{ chat.id }}</span>
                 </div>
+                @if (vm.leads[chat.id]; as lead) {
+                  @if (lead.leadScore >= 40) {
+                    <span class="lead-badge header {{ leadStatus(lead.leadScore) }}">
+                      {{ leadStatus(lead.leadScore) }} · {{ lead.leadScore }}
+                    </span>
+                  }
+                }
               </header>
 
               <div class="room-messages" #messagesContainer>

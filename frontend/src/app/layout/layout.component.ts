@@ -20,12 +20,14 @@ const ALL_NAV_ITEMS = [
   { to: '/', icon: 'layout-dashboard', key: 'dashboard', adminOnly: false, superAdminOnly: false },
   { to: '/sessions', icon: 'smartphone', key: 'sessions', adminOnly: false, superAdminOnly: false },
   { to: '/chats', icon: 'message-square', key: 'chats', adminOnly: false, superAdminOnly: false },
+  { to: '/properties', icon: 'building-2', key: 'properties', adminOnly: false, superAdminOnly: false },
   // Temporarily disabled (kept in code, removed from the nav):
   // { to: '/webhooks', icon: 'webhook', key: 'webhooks', adminOnly: false, superAdminOnly: false },
   // { to: '/templates', icon: 'clipboard-list', key: 'templates', adminOnly: false, superAdminOnly: false },
   // User & role management is SUPER_ADMIN-only.
   { to: '/users', icon: 'users', key: 'users', adminOnly: false, superAdminOnly: true },
-  { to: '/message-tester', icon: 'send', key: 'messageTester', adminOnly: false, superAdminOnly: false },
+  // Temporarily disabled (kept in code, removed from the nav):
+  // { to: '/message-tester', icon: 'send', key: 'messageTester', adminOnly: false, superAdminOnly: false },
   // Backend /infra/* is ADMIN-only; hide the nav item from non-admins (UX + defense-in-depth).
   // Temporarily disabled (kept in code, removed from the nav):
   // { to: '/infrastructure', icon: 'server', key: 'infrastructure', adminOnly: true, superAdminOnly: false },

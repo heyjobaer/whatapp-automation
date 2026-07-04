@@ -1123,3 +1123,34 @@
   cursor: zoom-in;
 }
 
+
+/* ── AI lead badge (Hot/Warm) in the chat list + room header ── */
+.chats-page .lead-badge {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.625rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+.chats-page .lead-badge.hot {
+  background: rgba(239, 68, 68, 0.15);
+  color: #dc2626;
+}
+.chats-page .lead-badge.warm {
+  background: rgba(245, 158, 11, 0.18);
+  color: #b45309;
+}
+.chats-page .lead-badge.cold {
+  background: rgba(100, 116, 139, 0.15);
+  color: #64748b;
+}
+/* On the green room header, use a translucent-white chip so it stays readable. */
+.chats-page .lead-badge.header {
+  margin-left: 0.5rem;
+  font-size: 0.6875rem;
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+}

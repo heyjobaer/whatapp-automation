@@ -1,0 +1,232 @@
+@if (vm$ | async; as vm) {
+  <div class="properties-page">
+    <app-page-header title="Properties" subtitle="The AI uses this data to answer customers">
+      <span badge>
+        <span class="count-badge">{{ vm.total }} total</span>
+      </span>
+      <div actions>
+        @if (vm.canWrite) {
+          <button class="btn-primary" (click)="openNew()">
+            <lucide-icon name="plus" [size]="18" />
+            Add property
+          </button>
+        }
+      </div>
+    </app-page-header>
+
+    @if (vm.loadError) {
+      <div class="error-banner" role="alert">
+        <lucide-icon name="alert-circle" [size]="20" />
+        <span class="error-banner-text">Failed to load properties.</span>
+      </div>
+    }
+
+    <div class="properties-content">
+      <div class="properties-toolbar">
+        <div class="search-input">
+          <lucide-icon name="search" [size]="18" />
+          <input
+            type="text"
+            placeholder="Search name, area or developer…"
+            [ngModel]="vm.searchTerm"
+            (ngModelChange)="setSearch($event)"
+          />
+        </div>
+      </div>
+
+      <div class="table-container">
+        @if (vm.loading) {
+          <div class="table-loading">
+            <lucide-icon name="loader-2" class="animate-spin" [size]="28" />
+          </div>
+        } @else if (vm.properties.length === 0) {
+          <div class="empty-table-state">
+            <lucide-icon name="building-2" [size]="48" [strokeWidth]="1" />
+            <h3>No properties yet</h3>
+            <p>Add your first property — the AI will use it to answer customers.</p>
+          </div>
+        } @else {
+          <table class="props-table">
+            <thead>
+              <tr class="table-row header">
+                <th>Property</th>
+                <th>Area</th>
+                <th>Type</th>
+                <th>Price (USD)</th>
+                <th>ROI</th>
+                <th>Status</th>
+                <th style="width: 6rem"></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (p of vm.properties; track p.id) {
+                <tr class="table-row">
+                  <td>
+                    <div class="prop-name">{{ p.name }}</div>
+                    <div class="prop-sub">{{ p.developer || '—' }} · {{ p.bedrooms }}BR</div>
+                  </td>
+                  <td>{{ p.area }}</td>
+                  <td>{{ p.type }}</td>
+                  <td class="prop-price">${{ p.priceUsd.toLocaleString() }}</td>
+                  <td>{{ p.roiPercent }}%</td>
+                  <td>
+                    <span class="status-badge {{ statusClass(p.status) }}">{{ p.status }}</span>
+                  </td>
+                  <td>
+                    <span class="actions-cell">
+                      @if (vm.canWrite) {
+                        <button class="icon-btn" (click)="openEdit(p)" title="Edit">
+                          <lucide-icon name="pencil" [size]="16" />
+                        </button>
+                        <button class="icon-btn danger" (click)="setDeleteTarget(p)" title="Delete">
+                          <lucide-icon name="trash-2" [size]="16" />
+                        </button>
+                      }
+                    </span>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </div>
+
+      @if (!vm.loading && vm.total > 0) {
+        <div class="pagination-bar">
+          <span class="page-info">
+            Showing {{ vm.offset + 1 }}–{{ rangeEnd() }} of {{ vm.total }}
+          </span>
+          <div class="page-controls">
+            <button class="btn-secondary btn-sm" (click)="prevPage()" [disabled]="vm.offset === 0">
+              <lucide-icon name="chevron-left" [size]="16" /> Prev
+            </button>
+            <button
+              class="btn-secondary btn-sm"
+              (click)="nextPage()"
+              [disabled]="vm.offset + pageSize >= vm.total"
+            >
+              Next <lucide-icon name="chevron-right" [size]="16" />
+            </button>
+          </div>
+        </div>
+      }
+    </div>
+
+    <!-- Add / Edit dialog -->
+    @if (vm.showDialog) {
+      <div class="modal-overlay" (click)="closeDialog()">
+        <div class="modal modal-lg" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h2>{{ vm.editingId ? 'Edit property' : 'Add new property' }}</h2>
+            <button class="btn-icon" (click)="closeDialog()">
+              <lucide-icon name="x" [size]="20" />
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="form-grid">
+              <div class="form-group col-span-2">
+                <label>Property name *</label>
+                <input type="text" [(ngModel)]="form.name" placeholder="Emaar Beachfront — Marina Vista" />
+              </div>
+              <div class="form-group">
+                <label>Area *</label>
+                <input type="text" [(ngModel)]="form.area" placeholder="Dubai Marina" />
+              </div>
+              <div class="form-group">
+                <label>Type *</label>
+                <select [(ngModel)]="form.type">
+                  @for (t of types; track t) {
+                    <option [value]="t">{{ t }}</option>
+                  }
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Bedrooms</label>
+                <input type="number" min="0" [(ngModel)]="form.bedrooms" />
+              </div>
+              <div class="form-group">
+                <label>Price USD *</label>
+                <input type="number" min="0" [(ngModel)]="form.priceUsd" />
+              </div>
+              <div class="form-group">
+                <label>Price AED</label>
+                <input type="number" min="0" [(ngModel)]="form.priceAed" />
+              </div>
+              <div class="form-group">
+                <label>ROI %</label>
+                <input type="number" step="0.1" [(ngModel)]="form.roiPercent" />
+              </div>
+              <div class="form-group">
+                <label>Developer</label>
+                <input type="text" [(ngModel)]="form.developer" placeholder="Emaar" />
+              </div>
+              <div class="form-group">
+                <label>Handover date</label>
+                <input type="text" [(ngModel)]="form.handoverDate" placeholder="Ready Now · Q4 2026" />
+              </div>
+              <div class="form-group">
+                <label>Status</label>
+                <select [(ngModel)]="form.status">
+                  @for (s of statuses; track s.value) {
+                    <option [value]="s.value">{{ s.label }}</option>
+                  }
+                </select>
+              </div>
+              <div class="form-group checkbox-group">
+                <label class="checkbox-label">
+                  <input type="checkbox" [(ngModel)]="form.isOffplan" />
+                  Off-plan property
+                </label>
+              </div>
+              <div class="form-group col-span-2">
+                <label>Description (the AI uses this)</label>
+                <textarea
+                  rows="3"
+                  [(ngModel)]="form.description"
+                  placeholder="Stunning sea-view apartment in the heart of Dubai Marina…"
+                ></textarea>
+              </div>
+            </div>
+            @if (vm.formError) {
+              <p class="form-error">{{ vm.formError }}</p>
+            }
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" (click)="closeDialog()">Cancel</button>
+            <button class="btn-primary" (click)="save()" [disabled]="vm.saving">
+              @if (vm.saving) {
+                <lucide-icon name="loader-2" class="animate-spin" [size]="16" />
+              } @else {
+                {{ vm.editingId ? 'Update' : 'Add property' }}
+              }
+            </button>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Delete confirm -->
+    @if (vm.deleteTarget; as target) {
+      <div class="modal-overlay" (click)="setDeleteTarget(null)">
+        <div class="modal confirm-modal" (click)="$event.stopPropagation()">
+          <div class="modal-header">
+            <h2>Delete property</h2>
+            <button class="btn-icon" (click)="setDeleteTarget(null)">
+              <lucide-icon name="x" [size]="20" />
+            </button>
+          </div>
+          <div class="modal-body">
+            <div class="confirm-icon-wrapper">
+              <lucide-icon name="alert-triangle" [size]="48" class="confirm-warning-icon" />
+            </div>
+            <p class="confirm-message">Delete <strong>{{ target.name }}</strong>? This cannot be undone.</p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-secondary" (click)="setDeleteTarget(null)">Cancel</button>
+            <button class="btn-danger" (click)="handleDelete()">Delete</button>
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+}

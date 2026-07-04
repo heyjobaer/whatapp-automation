@@ -17,6 +17,7 @@ const routes: Routes = [
       { path: '', loadChildren: () => import('./pages/dashboard/dashboard.module').then(m => m.DashboardModule) },
       { path: 'sessions', loadChildren: () => import('./pages/sessions/sessions.module').then(m => m.SessionsModule) },
       { path: 'chats', loadChildren: () => import('./pages/chats/chats.module').then(m => m.ChatsModule) },
+      { path: 'properties', loadChildren: () => import('./pages/properties/properties.module').then(m => m.PropertiesModule) },
       // Temporarily disabled (kept in code, not routed):
       // { path: 'webhooks', loadChildren: () => import('./pages/webhooks/webhooks.module').then(m => m.WebhooksModule) },
       // { path: 'templates', loadChildren: () => import('./pages/templates/templates.module').then(m => m.TemplatesModule) },
@@ -25,10 +26,11 @@ const routes: Routes = [
         canActivate: [SuperAdminGuard],
         loadChildren: () => import('./pages/users/users.module').then(m => m.UsersModule),
       },
-      {
-        path: 'message-tester',
-        loadChildren: () => import('./pages/message-tester/message-tester.module').then(m => m.MessageTesterModule),
-      },
+      // Temporarily disabled (kept in code, not routed):
+      // {
+      //   path: 'message-tester',
+      //   loadChildren: () => import('./pages/message-tester/message-tester.module').then(m => m.MessageTesterModule),
+      // },
       // Temporarily disabled (kept in code, not routed):
       // {
       //   path: 'infrastructure',
