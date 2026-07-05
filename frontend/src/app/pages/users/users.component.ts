@@ -56,7 +56,7 @@ export class UsersComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.titleService.setTitle('Users · OpenWA');
+    this.titleService.setTitle('Users');
     void this.reload();
   }
 

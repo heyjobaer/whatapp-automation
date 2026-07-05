@@ -1,8 +1,12 @@
 import { EventEmitter } from 'events';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { Client, LocalAuth, MessageMedia, MessageTypes, WAState, type Message } from 'whatsapp-web.js';
 import * as qrcode from 'qrcode';
 import * as path from 'path';
 import * as fs from 'fs';
+
+const execFileAsync = promisify(execFile);
 import {
   IWhatsAppEngine,
   EngineStatus,
@@ -333,6 +337,11 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
         this.logger.log(`Using auth timeout ${authTimeoutMs}ms`);
       }
 
+      // Self-heal a leftover profile lock BEFORE launching: a previous backend run (dev restart,
+      // crash) can orphan its Chrome, which keeps holding this session's userDataDir and makes
+      // every subsequent start fail with "The browser is already running for …".
+      await this.clearStaleBrowserLock();
+
       this.client = new Client({
         authStrategy: new LocalAuth({
           clientId: this.config.sessionId,
@@ -645,6 +654,47 @@ export class WhatsAppWebJsAdapter extends EventEmitter implements IWhatsAppEngin
     // → a fresh QR. (A no-op once the engine is superseded/torn down.)
     this.callbacks.onDisconnected?.('Saved session could not be restored; cleared for re-pairing');
     if (typeof client?.destroy === 'function') void client.destroy().catch(() => undefined);
+  }
+
+  /**
+   * Pre-launch self-heal for Chromium's profile lock: if a previous backend run died (dev restart,
+   * crash), its Chrome can outlive us and keep owning this session's userDataDir — every new start
+   * then fails with "The browser is already running for <dir>". Read the SingletonLock symlink
+   * (-> "<hostname>-<pid>"), kill the owner ONLY if it is verifiably a browser bound to THIS
+   * profile dir (never an unrelated process on a recycled pid), then remove the stale Singleton*
+   * files. POSIX-only: Chrome on Windows doesn't use the symlink lock.
+   */
+  private async clearStaleBrowserLock(): Promise<void> {
+    if (process.platform === 'win32') return;
+    const profileDir = path.join(path.resolve(this.config.sessionDataPath), `session-${this.config.sessionId}`);
+    const lockPath = path.join(profileDir, 'SingletonLock');
+
+    let lockTarget: string;
+    try {
+      lockTarget = await fs.promises.readlink(lockPath);
+    } catch {
+      return; // no lock — nothing to heal
+    }
+
+    const pid = Number(lockTarget.split('-').pop());
+    if (Number.isInteger(pid) && pid > 1) {
+      try {
+        const { stdout } = await execFileAsync('ps', ['-o', 'command=', '-p', String(pid)]);
+        if (stdout.includes(profileDir)) {
+          this.logger.warn(`Killing orphaned browser (pid ${pid}) still holding ${profileDir}`);
+          process.kill(pid, 'SIGKILL');
+          // Give the OS a moment to reap it before Chromium re-checks the lock.
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      } catch {
+        // `ps` exits non-zero when the pid is gone — the lock is merely stale; fall through.
+      }
+    }
+
+    for (const file of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+      await fs.promises.rm(path.join(profileDir, file), { force: true }).catch(() => {});
+    }
+    this.logger.warn(`Cleared stale browser lock for session ${this.config.sessionId}`);
   }
 
   /** Remove this session's LocalAuth directory so the next start re-pairs from a clean slate. */

@@ -113,7 +113,7 @@ export class SessionsComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.titleService.setTitle(`${this.lang.t('sessions.title')} · OpenWA`);
+    this.titleService.setTitle(`${this.lang.t('sessions.title')}`);
     this.unregisterSocket = this.socket.register({
       onSessionStatus: event => {
         const prev = this.sessions$.value.find(s => s.id === event.sessionId);

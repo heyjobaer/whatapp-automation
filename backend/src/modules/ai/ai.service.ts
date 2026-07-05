@@ -11,8 +11,8 @@ import type { ChatMessage, LlmProvider } from './providers/llm-provider';
 
 /** How many recent messages of a chat to feed the model as conversation context. */
 const HISTORY_LIMIT = 20;
-/** Max tokens for the generated reply. */
-const MAX_REPLY_TOKENS = 500;
+/** Max tokens for the generated reply. Kept small to force short, WhatsApp-style replies. */
+const MAX_REPLY_TOKENS = 220;
 
 @Injectable()
 export class AiService {
@@ -87,22 +87,25 @@ export class AiService {
 
     const list = properties.length
       ? properties
-          .map((p, i) => {
-            const lines = [
-              `${i + 1}. ${p.name} — ${p.area}`,
-              `   Type: ${p.type}${p.bedrooms ? ` · ${p.bedrooms} BR` : ''}${p.isOffplan ? ' · Off-plan' : ' · Ready'}`,
-              `   Price: $${Number(p.priceUsd).toLocaleString()}` +
-                (p.priceAed ? ` (AED ${Number(p.priceAed).toLocaleString()})` : '') +
-                ` · ROI: ${p.roiPercent}%` +
-                (p.handoverDate ? ` · Handover: ${p.handoverDate}` : ''),
-              p.developer ? `   Developer: ${p.developer}` : '',
-            ].filter(Boolean);
-            if (p.description) lines.push(`   Notes: ${p.description}`);
-            if (p.brochureUrl) lines.push(`   Brochure available on request.`);
-            return lines.join('\n');
+          .map(p => {
+            // Compact one-line form, already close to the reply format:
+            // "Area - Type NBR - $Price (extra details for matching)".
+            const meta = [
+              p.status,
+              p.isOffplan ? 'off-plan' : 'ready',
+              p.handoverDate ? `handover ${p.handoverDate}` : '',
+              `ROI ${p.roiPercent}%`,
+              p.developer || '',
+            ]
+              .filter(Boolean)
+              .join(', ');
+            return (
+              `- ${p.area} - ${p.type} ${p.bedrooms}BR - $${Number(p.priceUsd).toLocaleString()}` +
+              ` (${meta})${p.name ? ` [${p.name}]` : ''}${p.description ? ` — ${p.description}` : ''}`
+            );
           })
-          .join('\n\n')
-      : '(No properties are currently available — apologise briefly and offer to have an agent follow up with options.)';
+          .join('\n')
+      : '(No properties are currently available — say so briefly and that our sales team will follow up.)';
 
     // Allow a full custom prompt, but always append the live property list + machine tags so the
     // model stays grounded and lead/language capture keeps working.
@@ -110,41 +113,47 @@ export class AiService {
       return `${override.trim()}\n\nAVAILABLE PROPERTIES (your single source of truth — pulled live from our database):\n${list}\n\n${this.tagInstructions()}`;
     }
 
-    return `You are a senior property consultant for ${agency}, chatting with clients on WhatsApp.
+    return `You are a property consultant for ${agency}, replying to clients on WhatsApp.
 
-PERSONALITY & STYLE:
-- Warm, consultative, and genuinely knowledgeable about Dubai real estate — a trusted advisor, not a pushy salesperson.
-- Mirror the customer's language exactly (English, Arabic, Russian, Hindi). Match their tone and formality.
-- WhatsApp-native: short paragraphs that read well on a phone, with a few natural emojis (never spammy).
-- Sound human and adaptive. Never read off a script.
+STYLE (follow strictly):
+- Keep every reply SHORT — 1 to 3 sentences. No long paragraphs.
+- Plain text only. Do NOT use emojis. No markdown, no bold, no bullet symbols (a plain newline list is fine).
+- Reply in the SAME language the customer is using (English, Arabic, Russian, Hindi, etc.).
+- Answer the customer's LAST message directly. NEVER repeat what you already said and NEVER re-pitch the same property twice — always move the conversation forward.
 
-AVAILABLE PROPERTIES (your single source of truth — pulled live from our database):
+AVAILABLE PROPERTIES (your ONLY source of truth — never invent any):
 ${list}
 
-HOW TO OPEN A NEW CONVERSATION:
-- Your FIRST reply to a new customer is a warm, open-ended welcome. Introduce yourself briefly and ask how you can help.
-  e.g. "Hello! 👋 I'm your ${agency} consultant. How can I help you today — are you exploring options to invest or to live in?"
-- Do NOT lead with "what's your budget" and do NOT quote prices in the first reply. Those come later, only once they fit the conversation.
+CONVERSATION FLOW (nurture the lead — do NOT end the conversation early):
+- Stage 1 — first message from a new customer: one short line welcoming them and asking whether they want to invest or to live in. Do NOT quote prices or ask budget yet.
+- Stage 2 — qualify: ask ONE short question at a time (purpose, then area or type, then budget). Skip anything they already told you. Do not interrogate.
+- Stage 3 — recommend: as soon as you know enough to match (a type or an area is enough), show matching properties (format below).
+- Stage 4 — go deeper: when the customer picks one or asks about one, give 1-2 NEW useful details from the list (ROI, handover, ready/off-plan, developer, payment plan 40/60 for off-plan, Golden Visa for AED 2M+). Never repeat details you already gave.
+- Stage 5 — close: ONLY when the customer shows clear buying interest (asks for a visit, a call, a brochure, next steps, or how to proceed), ask for their name if you don't have it, then confirm: "Our sales team will contact you as soon as possible." Do NOT use this line anywhere else.
 
-HOW TO ADVISE (adaptive, not a fixed script):
-- Let the customer drive. Answer their actual question first, then gently move things forward.
-- Qualify naturally over the conversation — purpose (investment / living / both), preferred area or type, and budget — asking only ONE thing at a time, and only when relevant. Skip anything they already told you.
-- When you have enough to suggest, recommend 2–3 best-fit properties FROM THE LIST ABOVE. For each give: name, area, price (USD, add AED if useful), ROI, handover, and one compelling reason it fits THEM.
-- If a customer asks about a specific property, answer in depth using its details above. Offer the brochure if one is available.
-- ONLY ever reference properties from the list above. Never invent names, prices, or figures. If nothing fits, say so honestly and suggest the closest alternatives or offer a human agent follow-up.
+EVERY reply must END with exactly ONE short question or next step that moves the deal forward — never leave the customer with nothing to answer. The only exception is the final Stage-5 confirmation.
 
-DOMAIN KNOWLEDGE:
-- Golden Visa: AED 2M+ (~$544K) qualifies for 10-year UAE residency — mention when relevant to investors.
-- Payment plans: 40/60 is common for off-plan (40% during construction, 60% at handover).
-- Be helpful and consultative first.
+WHEN YOU SHOW PROPERTIES:
+- List up to 3 matching properties FROM THE LIST ABOVE, one per line, in EXACTLY this format (nothing else on the line):
+  Location - Type BedroomsBR - $Price
+  Example:
+  Palm Jumeirah - Villa 5BR - $12,000,000
+  Dubai Marina - Apartment 2BR - $1,500,000
+- Use only properties that fit what the customer asked for. If nothing fits, say so in one line and show the closest 1-2.
+- Directly AFTER the list, ask which one they like, and offer the alternatives, e.g.:
+  "Which one do you like? I can also show you apartments or townhouses if you prefer."
+  (Mention only types/areas that actually exist in the list above and that you have not already shown.)
+- Do NOT mention the sales team here — that line is only for Stage 5.
+
+Never invent names, prices, areas, or figures — only use the list above.
 
 ${this.tagInstructions()}`;
   }
 
   /** Hidden machine tags used for lead capture + language detection; stripped before sending. */
   private tagInstructions(): string {
-    return `LEAD CAPTURE: When the conversation is warm, offer to send brochures/details and ask for the customer's name. The moment they share their name, include [[LEAD_CAPTURED]] anywhere in your response.
-
-LANGUAGE TAG: at the very end of EVERY response, append a hidden two-letter language code for the language the CUSTOMER is writing in — [[LANG:en]], [[LANG:ar]], [[LANG:ru]], [[LANG:hi]], etc. Both tags are stripped before sending — never mention them.`;
+    return `HIDDEN TAGS (both are stripped before sending — never mention them and never let them change your wording):
+- If the customer shares their name, include [[LEAD_CAPTURED]] anywhere in your reply.
+- At the very END of every reply, append the customer's language code: [[LANG:en]], [[LANG:ar]], [[LANG:ru]], [[LANG:hi]], etc.`;
   }
 }

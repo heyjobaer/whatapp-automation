@@ -51,7 +51,7 @@ export class LeadsComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.titleService.setTitle('Leads · OpenWA');
+    this.titleService.setTitle('Leads');
     this.api.sessions
       .list()
       .then(sessions => {

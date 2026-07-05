@@ -138,7 +138,7 @@ export class InfrastructureComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.titleService.setTitle(`${this.lang.t('infrastructure.title')} · OpenWA`);
+    this.titleService.setTitle(`${this.lang.t('infrastructure.title')}`);
 
     // Seed the editable form ONCE from live /status (the running selection) + saved /config (detail
     // fields /status does not expose). Secrets are never returned, so their inputs stay empty; an

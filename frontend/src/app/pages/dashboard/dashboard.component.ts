@@ -49,7 +49,7 @@ export class DashboardComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    this.titleService.setTitle(`${this.lang.t('dashboard.title')} · OpenWA`);
+    this.titleService.setTitle(`${this.lang.t('dashboard.title')}`);
 
     this.api.sessions
       .list()

@@ -182,7 +182,7 @@ export class ChatsComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.titleService.setTitle(`${this.lang.t('nav.chats')} · OpenWA`);
+    this.titleService.setTitle(`${this.lang.t('nav.chats')}`);
     this.unregisterSocket = this.socket.register({
       onMessage: event => this.handleIncomingMessage(event.sessionId, event.message as unknown as IncomingWsMessage),
       onMessageAck: event => this.handleIncomingAck(event.sessionId, event.messageId, event.status),

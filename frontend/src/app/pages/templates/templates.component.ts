@@ -143,7 +143,7 @@ export class TemplatesComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.titleService.setTitle(`${this.lang.t('templates.title')} · OpenWA`);
+    this.titleService.setTitle(`${this.lang.t('templates.title')}`);
     this.api.sessions
       .list()
       .then(sessions => {

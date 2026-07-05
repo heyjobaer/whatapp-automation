@@ -99,7 +99,7 @@ export class MessageTesterComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.titleService.setTitle(`${this.lang.t('messageTester.title')} · OpenWA`);
+    this.titleService.setTitle(`${this.lang.t('messageTester.title')}`);
     this.api.sessions
       .list()
       .then(sessions => {

@@ -118,7 +118,7 @@ export class WebhooksComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.titleService.setTitle(`${this.lang.t('webhooks.title')} · OpenWA`);
+    this.titleService.setTitle(`${this.lang.t('webhooks.title')}`);
     void this.reload();
     this.api.sessions.list().then(s => this.sessions$.next(s)).catch(() => {});
   }

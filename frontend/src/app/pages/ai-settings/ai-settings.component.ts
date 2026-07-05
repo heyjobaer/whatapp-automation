@@ -43,7 +43,7 @@ export class AiSettingsComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    this.titleService.setTitle('AI Settings · OpenWA');
+    this.titleService.setTitle('AI Settings');
     void this.load();
   }
 

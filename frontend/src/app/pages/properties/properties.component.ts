@@ -94,7 +94,7 @@ export class PropertiesComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.titleService.setTitle('Properties · OpenWA');
+    this.titleService.setTitle('Properties');
     void this.reload();
   }
 
