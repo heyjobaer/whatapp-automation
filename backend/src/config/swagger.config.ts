@@ -15,7 +15,7 @@ export function createSwaggerConfig(): Omit<OpenAPIObject, 'paths'> {
   const { version } = require('../../package.json') as { version: string };
   return (
     new DocumentBuilder()
-      .setTitle('OpenWA API')
+      .setTitle('API')
       .setDescription('Open Source WhatsApp API Gateway - Free, Self-Hosted HTTP API')
       .setVersion(version)
       .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, BEARER_SECURITY_SCHEME)

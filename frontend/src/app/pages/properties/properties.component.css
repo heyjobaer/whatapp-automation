@@ -407,3 +407,32 @@
     grid-column: span 1;
   }
 }
+
+/* ── Responsive: mobile / tablet toolbars + header actions ── */
+@media (max-width: 768px) {
+  .properties-page {
+    padding: 1rem;
+  }
+  .properties-toolbar {
+    padding: 0.75rem;
+  }
+  .search-input {
+    min-width: 0;
+    width: 100%;
+  }
+  [actions] {
+    width: 100%;
+  }
+  [actions] .btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+  .pagination-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  .page-controls {
+    justify-content: space-between;
+  }
+}

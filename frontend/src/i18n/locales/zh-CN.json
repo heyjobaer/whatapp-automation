@@ -68,6 +68,9 @@
     "palette": "调色板"
   },
   "nav": {
+    "properties": "房产",
+    "leads": "线索",
+    "aiSettings": "AI 设置",
     "dashboard": "仪表盘",
     "sessions": "会话",
     "chats": "聊天",

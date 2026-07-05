@@ -68,6 +68,9 @@
     "palette": "రంగుల పలక"
   },
   "nav": {
+    "properties": "ప్రాపర్టీలు",
+    "leads": "లీడ్స్",
+    "aiSettings": "AI సెట్టింగ్‌లు",
     "dashboard": "డ్యాష్‌బోర్డ్",
     "sessions": "సెషన్స్",
     "chats": "చాట్‌లు",

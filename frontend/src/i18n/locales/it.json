@@ -68,6 +68,9 @@
     "palette": "Tavolozza"
   },
   "nav": {
+    "properties": "Proprietà",
+    "leads": "Contatti",
+    "aiSettings": "Impostazioni IA",
     "dashboard": "Dashboard",
     "sessions": "Sessioni",
     "chats": "Chat",

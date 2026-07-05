@@ -68,6 +68,9 @@
     "palette": "Paleta"
   },
   "nav": {
+    "properties": "Imóveis",
+    "leads": "Leads",
+    "aiSettings": "Configurações de IA",
     "dashboard": "Painel",
     "sessions": "Sessões",
     "chats": "Chats",

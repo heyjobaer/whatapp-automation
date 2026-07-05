@@ -68,6 +68,9 @@
     "palette": "Palette"
   },
   "nav": {
+    "properties": "Propriétés",
+    "leads": "Prospects",
+    "aiSettings": "Paramètres IA",
     "dashboard": "Tableau de bord",
     "sessions": "Sessions",
     "chats": "Discussions",

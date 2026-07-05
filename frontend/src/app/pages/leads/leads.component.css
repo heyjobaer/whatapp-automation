@@ -228,3 +228,32 @@
 .lead-phone:hover {
   text-decoration: underline;
 }
+
+/* ── Responsive: mobile / tablet ── */
+@media (max-width: 768px) {
+  .leads-page {
+    padding: 1rem;
+  }
+  /* Stack the session selector + refresh button under the header on small screens. */
+  [actions] {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.5rem;
+    width: 100%;
+  }
+  .session-select,
+  .btn-secondary {
+    width: 100%;
+    justify-content: center;
+  }
+  .count-badge {
+    margin-bottom: 0.25rem;
+  }
+}
+@media (max-width: 480px) {
+  .leads-table th,
+  .leads-table td {
+    padding: 0.6rem 0.7rem;
+  }
+}

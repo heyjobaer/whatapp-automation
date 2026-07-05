@@ -1,11 +1,12 @@
 import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
-import { AdminGuard, AuthGuard, SuperAdminGuard } from './core/guards';
+import { AdminGuard, AuthGuard, GuestGuard, SuperAdminGuard } from './core/guards';
 import { LayoutComponent } from './layout/layout.component';
 
 const routes: Routes = [
   {
     path: 'login',
+    canActivate: [GuestGuard],
     loadChildren: () => import('./pages/login/login.module').then(m => m.LoginModule),
   },
   {

@@ -68,6 +68,9 @@
     "palette": "לוח צבעים"
   },
   "nav": {
+    "properties": "נכסים",
+    "leads": "לידים",
+    "aiSettings": "הגדרות AI",
     "dashboard": "דאשבורד",
     "sessions": "Sessions",
     "chats": "שיחות",
