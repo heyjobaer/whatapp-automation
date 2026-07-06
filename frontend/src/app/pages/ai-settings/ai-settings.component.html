@@ -31,12 +31,20 @@
         <div class="grid">
           <div class="field">
             <label>Provider</label>
-            <input type="text" [(ngModel)]="provider" name="provider" placeholder="groq" />
-            <span class="hint">Currently only <code>groq</code> is supported.</span>
+            <select [(ngModel)]="provider" name="provider" (ngModelChange)="onProviderChange()">
+              @for (p of providers; track p.value) {
+                <option [value]="p.value">{{ p.label }}</option>
+              }
+            </select>
+            <span class="hint">Set the matching API key below when you switch provider.</span>
           </div>
           <div class="field">
             <label>Model</label>
-            <input type="text" [(ngModel)]="model" name="model" placeholder="llama-3.3-70b-versatile" />
+            <select [(ngModel)]="model" name="model">
+              @for (m of modelOptions; track m.value) {
+                <option [value]="m.value">{{ m.label }}</option>
+              }
+            </select>
           </div>
         </div>
 
@@ -51,6 +59,7 @@
             [placeholder]="vm.settings?.apiKeySet ? (vm.settings?.apiKeyPreview || '•••• set') : 'Paste your API key'"
           />
           <span class="hint">
+            {{ keyHint }}
             @if (vm.settings?.apiKeySet) {
               A key is set ({{ vm.settings?.apiKeyPreview }}). Leave blank to keep it, or paste a new one to replace it.
             } @else {

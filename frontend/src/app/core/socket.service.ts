@@ -107,7 +107,7 @@ export class SocketService {
   connect(): void {
     if (this.socket?.connected || this.socket?.active) return;
 
-    const token = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
     if (!token) {
       console.warn('[WebSocket] No auth token found, skipping connection');
       return;

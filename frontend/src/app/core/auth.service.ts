@@ -8,13 +8,14 @@ const USER_STORAGE_KEY = 'openwa_user';
 
 /**
  * Email + password (JWT) auth + role state.
- * The token lives in sessionStorage (per-tab); the authenticated user (incl. role) in localStorage.
+ * The token and the authenticated user (incl. role) both live in localStorage so the session
+ * persists across tabs and reloads (a new tab stays logged in).
  * Roles: SUPER_ADMIN > ADMIN > READONLY.
  */
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly _user$ = new BehaviorSubject<LoginResponse['user'] | null>(this.readStoredUser());
-  private readonly _isAuthenticated$ = new BehaviorSubject<boolean>(!!sessionStorage.getItem(TOKEN_STORAGE_KEY));
+  private readonly _isAuthenticated$ = new BehaviorSubject<boolean>(!!localStorage.getItem(TOKEN_STORAGE_KEY));
 
   readonly user$: Observable<LoginResponse['user'] | null> = this._user$.asObservable();
   readonly role$: Observable<UserRole | null> = this._user$.pipe(map(user => user?.role ?? null));
@@ -63,7 +64,7 @@ export class AuthService {
       return { ok: false, message: errorData.message };
     }
     const data = (await response.json()) as LoginResponse;
-    sessionStorage.setItem(TOKEN_STORAGE_KEY, data.token);
+    localStorage.setItem(TOKEN_STORAGE_KEY, data.token);
     this.setUser(data.user);
     this._isAuthenticated$.next(true);
     return { ok: true };
@@ -71,7 +72,7 @@ export class AuthService {
 
   /** Refresh the stored user (role/name) from the backend on app start. Keeps state on failure. */
   async revalidate(): Promise<void> {
-    const token = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    const token = localStorage.getItem(TOKEN_STORAGE_KEY);
     if (!token) return;
     try {
       const response = await fetch(`${API_BASE_URL}/auth/me`, { headers: { Authorization: `Bearer ${token}` } });
@@ -84,7 +85,7 @@ export class AuthService {
   }
 
   logout(): void {
-    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
     this.setUser(null);
     this._isAuthenticated$.next(false);
   }

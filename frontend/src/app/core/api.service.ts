@@ -45,7 +45,7 @@ export const TOKEN_STORAGE_KEY = 'openwa_token';
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`;
 
-  const token = sessionStorage.getItem(TOKEN_STORAGE_KEY);
+  const token = localStorage.getItem(TOKEN_STORAGE_KEY);
 
   // For FormData (file uploads) let the browser set multipart/form-data + boundary itself.
   const isFormData = options.body instanceof FormData;
@@ -60,7 +60,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   if (response.status === 401) {
     // The stored token is missing/expired — clear it and return to login so the user isn't
     // stuck on a dashboard that 401s every request.
-    sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    localStorage.removeItem(TOKEN_STORAGE_KEY);
     if (typeof window !== 'undefined') {
       window.location.assign('/');
       // The page is navigating away — halt this request's promise chain so callers neither

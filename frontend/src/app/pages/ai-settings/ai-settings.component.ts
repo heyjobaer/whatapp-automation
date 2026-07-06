@@ -6,6 +6,43 @@ import { ApiService } from '../../core/api.service';
 import { ToastService } from '../../core/toast.service';
 import type { AiSettingsUpdate, AiSettingsView } from '../../core/api.types';
 
+interface ProviderOption {
+  value: string;
+  label: string;
+  models: { value: string; label: string }[];
+  keyHint: string;
+}
+
+/** Providers the dispatcher supports, with their selectable models + where to get the API key. */
+const PROVIDERS: ProviderOption[] = [
+  {
+    value: 'groq',
+    label: 'Groq (free — Llama)',
+    keyHint: 'Groq API key (console.groq.com).',
+    models: [{ value: 'llama-3.3-70b-versatile', label: 'Llama 3.3 70B (versatile)' }],
+  },
+  {
+    value: 'claude',
+    label: 'Claude (Anthropic)',
+    keyHint: 'Anthropic API key (console.anthropic.com).',
+    models: [
+      { value: 'claude-sonnet-5', label: 'Claude Sonnet 5 (recommended)' },
+      { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5 (cheapest)' },
+      { value: 'claude-opus-4-8', label: 'Claude Opus 4.8 (best)' },
+    ],
+  },
+  {
+    value: 'zai',
+    label: 'Z.ai (GLM)',
+    keyHint: 'Z.ai API key (z.ai).',
+    models: [
+      { value: 'glm-4.6', label: 'GLM-4.6 (recommended)' },
+      { value: 'glm-4.5', label: 'GLM-4.5' },
+      { value: 'glm-4.5-air', label: 'GLM-4.5-Air (cheapest)' },
+    ],
+  },
+];
+
 @Component({
   selector: 'app-ai-settings',
   standalone: false,
@@ -14,6 +51,7 @@ import type { AiSettingsUpdate, AiSettingsView } from '../../core/api.types';
   styleUrl: './ai-settings.component.css',
 })
 export class AiSettingsComponent implements OnInit {
+  readonly providers = PROVIDERS;
   private readonly loading$ = new BehaviorSubject(true);
   private readonly saving$ = new BehaviorSubject(false);
   private readonly loadError$ = new BehaviorSubject(false);
@@ -45,6 +83,30 @@ export class AiSettingsComponent implements OnInit {
   ngOnInit(): void {
     this.titleService.setTitle('AI Settings');
     void this.load();
+  }
+
+  /** The currently selected provider's config (falls back to the first provider). */
+  private get currentProvider(): ProviderOption {
+    return this.providers.find(p => p.value === this.provider) ?? this.providers[0];
+  }
+
+  /** Models to show in the model dropdown. Includes the saved model if it's a custom/unknown one. */
+  get modelOptions(): { value: string; label: string }[] {
+    const models = [...this.currentProvider.models];
+    if (this.model && !models.some(m => m.value === this.model)) {
+      models.unshift({ value: this.model, label: `${this.model} (custom)` });
+    }
+    return models;
+  }
+
+  /** Hint under the API-key field telling the admin which key to paste. */
+  get keyHint(): string {
+    return this.currentProvider.keyHint;
+  }
+
+  /** When the provider changes, default the model to that provider's first model. */
+  onProviderChange(): void {
+    this.model = this.currentProvider.models[0]?.value ?? '';
   }
 
   private async load(): Promise<void> {

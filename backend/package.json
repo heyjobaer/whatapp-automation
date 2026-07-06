@@ -41,6 +41,7 @@
     "admin:reset": "nest build && node dist/database/reset-admin.js"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
     "@aws-sdk/client-s3": "^3.1075.0",
     "@bull-board/api": "^8.0.1",
     "@bull-board/express": "^8.0.1",
