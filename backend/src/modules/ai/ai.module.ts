@@ -4,7 +4,7 @@ import { AiSettingsService } from './ai-settings.service';
 import { AiSettingsController } from './ai-settings.controller';
 import { LLM_PROVIDER, LlmProvider } from './providers/llm-provider';
 import { DispatchingLlmProvider } from './providers/dispatching.provider';
-import { PropertiesModule } from '../properties/properties.module';
+import { MortgagesModule } from '../mortgages/mortgages.module';
 import { LeadsModule } from '../leads/leads.module';
 
 // The LLM provider reads its provider/key/model from the DB-backed AiSettingsService at call time,
@@ -16,7 +16,7 @@ const llmProvider = {
 };
 
 @Module({
-  imports: [PropertiesModule, LeadsModule],
+  imports: [MortgagesModule, LeadsModule],
   controllers: [AiSettingsController],
   providers: [AiService, AiSettingsService, llmProvider],
   exports: [AiService, AiSettingsService],

@@ -53,24 +53,45 @@ export class LeadService {
     return this.knex<ChatLead>(TABLE).where({ sessionId }).orderBy('leadScore', 'desc');
   }
 
-  /** Heuristic slot-filling from the customer's message text (mirrors the AI-automation extractor). */
+  /**
+   * Heuristic slot-filling from the client's message text (UK mortgage signals). The three
+   * qualification columns are reused for mortgage data:
+   *  - `budget`   -> property value / deposit band
+   *  - `purpose`  -> what they need (First-time buyer / Home mover / Remortgage / Buy-to-let)
+   *  - `propType` -> employment type (Employed / Self-employed), a key affordability signal
+   */
   private extractInfo(userMessage: string): Partial<ChatLead> {
     const msg = userMessage.toLowerCase();
     const update: Partial<ChatLead> = {};
 
-    if (msg.includes('300k') || msg.includes('under 300')) update.budget = 'Under $300K';
-    else if (msg.includes('600k') || msg.includes('500k')) update.budget = '$300K-$600K';
-    else if (msg.includes('1m') || msg.includes('million')) update.budget = '$600K-$1M';
-    else if (msg.includes('above 1') || msg.includes('over 1m')) update.budget = 'Above $1M';
+    // Property value / borrowing size band (rough — a £ figure or a "k"/"m" amount).
+    const money = msg.match(/£?\s?(\d[\d,]*)\s?(k|m|,000)?/);
+    if (msg.includes('deposit')) update.budget = 'Deposit discussed';
+    if (money) {
+      const n = Number(money[1].replace(/,/g, ''));
+      const unit = money[2];
+      const value = unit === 'm' ? n * 1_000_000 : unit === 'k' ? n * 1_000 : n;
+      if (value >= 1000) {
+        if (value < 250_000) update.budget = 'Under £250k';
+        else if (value < 500_000) update.budget = '£250k–£500k';
+        else if (value < 1_000_000) update.budget = '£500k–£1m';
+        else update.budget = 'Over £1m';
+      }
+    }
 
-    if (msg.includes('invest')) update.purpose = 'Investment';
-    else if (msg.includes('live') || msg.includes('family') || msg.includes('home')) update.purpose = 'Living';
-    else if (msg.includes('both')) update.purpose = 'Both';
+    if (msg.includes('first time') || msg.includes('first-time') || msg.includes('ftb') || msg.includes('first home'))
+      update.purpose = 'First-time buyer';
+    else if (msg.includes('remortgage') || msg.includes('switch') || msg.includes('deal ending') || msg.includes('renew'))
+      update.purpose = 'Remortgage';
+    else if (msg.includes('buy to let') || msg.includes('buy-to-let') || msg.includes('btl') || msg.includes('landlord') || msg.includes('rent it out'))
+      update.purpose = 'Buy-to-let';
+    else if (msg.includes('moving') || msg.includes('move home') || msg.includes('next home') || msg.includes('new house'))
+      update.purpose = 'Home mover';
 
-    if (msg.includes('villa')) update.propType = 'Villa';
-    else if (msg.includes('apartment') || msg.includes('flat')) update.propType = 'Apartment';
-    else if (msg.includes('penthouse')) update.propType = 'Penthouse';
-    else if (msg.includes('townhouse')) update.propType = 'Townhouse';
+    if (msg.includes('self employed') || msg.includes('self-employed') || msg.includes('sole trader') || msg.includes('contractor') || msg.includes('freelance') || msg.includes('company director'))
+      update.propType = 'Self-employed';
+    else if (msg.includes('employed') || msg.includes('salary') || msg.includes('payslip') || msg.includes('full time') || msg.includes('full-time') || msg.includes('permanent job'))
+      update.propType = 'Employed';
 
     return update;
   }

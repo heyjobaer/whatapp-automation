@@ -9,8 +9,8 @@ const DEFAULT_CLAUDE_MODEL = 'claude-opus-4-8';
 /**
  * Anthropic (Claude) provider. Like GroqProvider, the API key + model come from the DB-backed
  * AiSettingsService so an admin can change them at runtime; the client is rebuilt when the key
- * changes. The system prompt (which carries the full property list) is sent as a cached block so
- * repeated replies only pay ~0.1x for that prefix.
+ * changes. The system prompt (which carries the full mortgage product list) is sent as a cached
+ * block so repeated replies only pay ~0.1x for that prefix.
  */
 export class AnthropicProvider implements LlmProvider {
   private readonly logger = new Logger(AnthropicProvider.name);

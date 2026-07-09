@@ -6,44 +6,46 @@ import { debounceTime, distinctUntilChanged, skip, takeUntil } from 'rxjs/operat
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { ToastService } from '../../core/toast.service';
-import type { Property, PropertyPayload, PropertyStatus } from '../../core/api.types';
+import type { MortgageProduct, MortgageProductPayload } from '../../core/api.types';
 
 const PAGE_SIZE = 100;
 
-const EMPTY_FORM: PropertyPayload = {
-  name: '',
-  area: '',
-  type: 'Apartment',
-  bedrooms: 1,
-  priceUsd: 0,
-  priceAed: 0,
-  roiPercent: 0,
+const EMPTY_FORM: MortgageProductPayload = {
+  lender: '',
+  productName: '',
+  category: 'residential',
+  rateType: 'fixed',
+  initialRate: 0,
+  initialPeriodMonths: 24,
+  followOnRate: null,
+  maxLtvPercent: 90,
+  maxTermYears: 40,
+  productFee: 0,
+  repaymentType: 'repayment',
+  ercApplies: true,
   status: 'available',
-  isOffplan: false,
-  developer: '',
   description: '',
-  handoverDate: '',
-  brochureUrl: '',
 };
 
 @Component({
-  selector: 'app-properties',
+  selector: 'app-mortgages',
   standalone: false,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  templateUrl: './properties.component.html',
-  styleUrl: './properties.component.css',
+  templateUrl: './mortgages.component.html',
+  styleUrl: './mortgages.component.css',
 })
-export class PropertiesComponent implements OnInit, OnDestroy {
+export class MortgagesComponent implements OnInit, OnDestroy {
   private readonly destroy$ = new Subject<void>();
 
-  readonly types = ['Apartment', 'Villa', 'Penthouse', 'Townhouse'];
-  readonly statuses: Array<{ label: string; value: PropertyStatus }> = [
+  readonly categories = ['residential', 'first-time-buyer', 'home-mover', 'remortgage', 'buy-to-let'];
+  readonly rateTypes = ['fixed', 'tracker', 'discount', 'variable'];
+  readonly repaymentTypes = ['repayment', 'interest-only'];
+  readonly statuses: Array<{ label: string; value: string }> = [
     { label: 'Available', value: 'available' },
-    { label: 'Reserved', value: 'reserved' },
-    { label: 'Sold', value: 'sold' },
+    { label: 'Withdrawn', value: 'withdrawn' },
   ];
 
-  readonly properties$ = new BehaviorSubject<Property[]>([]);
+  readonly products$ = new BehaviorSubject<MortgageProduct[]>([]);
   readonly total$ = new BehaviorSubject(0);
   readonly loading$ = new BehaviorSubject(true);
   readonly loadError$ = new BehaviorSubject(false);
@@ -54,16 +56,16 @@ export class PropertiesComponent implements OnInit, OnDestroy {
   readonly editingId$ = new BehaviorSubject<string | null>(null);
   readonly saving$ = new BehaviorSubject(false);
   readonly formError$ = new BehaviorSubject('');
-  readonly deleteTarget$ = new BehaviorSubject<Property | null>(null);
+  readonly deleteTarget$ = new BehaviorSubject<MortgageProduct | null>(null);
 
   // Two-way bound form for the add/edit dialog.
-  form: PropertyPayload = { ...EMPTY_FORM };
+  form: MortgageProductPayload = { ...EMPTY_FORM };
 
   readonly pageSize = PAGE_SIZE;
 
   readonly vm$ = defer(() =>
     combineLatest({
-      properties: this.properties$,
+      products: this.products$,
       total: this.total$,
       loading: this.loading$,
       loadError: this.loadError$,
@@ -94,7 +96,7 @@ export class PropertiesComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    this.titleService.setTitle('Properties');
+    this.titleService.setTitle('Mortgages');
     void this.reload();
   }
 
@@ -106,12 +108,12 @@ export class PropertiesComponent implements OnInit, OnDestroy {
   private async reload(): Promise<void> {
     this.loading$.next(true);
     try {
-      const res = await this.api.properties.list({
+      const res = await this.api.mortgages.list({
         limit: PAGE_SIZE,
         offset: this.offset$.value,
         search: this.searchTerm$.value.trim() || undefined,
       });
-      this.properties$.next(res.data);
+      this.products$.next(res.data);
       this.total$.next(res.total);
       this.loadError$.next(false);
     } catch {
@@ -138,11 +140,17 @@ export class PropertiesComponent implements OnInit, OnDestroy {
   }
 
   rangeEnd(): number {
-    return Math.min(this.offset$.value + this.properties$.value.length, this.total$.value);
+    return Math.min(this.offset$.value + this.products$.value.length, this.total$.value);
   }
 
   statusClass(status: string): string {
-    return status === 'available' ? 'available' : status === 'reserved' ? 'reserved' : 'sold';
+    return status === 'available' ? 'available' : 'sold';
+  }
+
+  /** "5yr" / "24mo" label for a product's initial period. */
+  periodLabel(months: number): string {
+    if (!months) return '—';
+    return months % 12 === 0 ? `${months / 12}yr` : `${months}mo`;
   }
 
   openNew(): void {
@@ -152,21 +160,22 @@ export class PropertiesComponent implements OnInit, OnDestroy {
     this.showDialog$.next(true);
   }
 
-  openEdit(p: Property): void {
+  openEdit(p: MortgageProduct): void {
     this.form = {
-      name: p.name,
-      area: p.area,
-      type: p.type,
-      bedrooms: p.bedrooms,
-      priceUsd: p.priceUsd,
-      priceAed: p.priceAed,
-      roiPercent: p.roiPercent,
+      lender: p.lender,
+      productName: p.productName,
+      category: p.category,
+      rateType: p.rateType,
+      initialRate: p.initialRate,
+      initialPeriodMonths: p.initialPeriodMonths,
+      followOnRate: p.followOnRate ?? null,
+      maxLtvPercent: p.maxLtvPercent,
+      maxTermYears: p.maxTermYears,
+      productFee: p.productFee,
+      repaymentType: p.repaymentType,
+      ercApplies: p.ercApplies,
       status: p.status,
-      isOffplan: p.isOffplan,
-      developer: p.developer ?? '',
       description: p.description ?? '',
-      handoverDate: p.handoverDate ?? '',
-      brochureUrl: p.brochureUrl ?? '',
     };
     this.editingId$.next(p.id);
     this.formError$.next('');
@@ -177,13 +186,13 @@ export class PropertiesComponent implements OnInit, OnDestroy {
     this.showDialog$.next(false);
   }
 
-  setDeleteTarget(p: Property | null): void {
+  setDeleteTarget(p: MortgageProduct | null): void {
     this.deleteTarget$.next(p);
   }
 
   async save(): Promise<void> {
-    if (!this.form.name.trim() || !this.form.area.trim() || !this.form.priceUsd) {
-      this.formError$.next('Name, area and USD price are required.');
+    if (!this.form.lender.trim() || !this.form.productName.trim() || this.form.initialRate == null) {
+      this.formError$.next('Lender, product name and rate are required.');
       return;
     }
     this.saving$.next(true);
@@ -191,16 +200,16 @@ export class PropertiesComponent implements OnInit, OnDestroy {
     try {
       const editingId = this.editingId$.value;
       if (editingId) {
-        await this.api.properties.update(editingId, this.form);
-        this.toast.success('Saved', 'Property updated successfully.');
+        await this.api.mortgages.update(editingId, this.form);
+        this.toast.success('Saved', 'Mortgage product updated successfully.');
       } else {
-        await this.api.properties.create(this.form);
-        this.toast.success('Saved', 'Property added successfully.');
+        await this.api.mortgages.create(this.form);
+        this.toast.success('Saved', 'Mortgage product added successfully.');
       }
       this.showDialog$.next(false);
       void this.reload();
     } catch (err) {
-      this.formError$.next(err instanceof Error ? err.message : 'Could not save property.');
+      this.formError$.next(err instanceof Error ? err.message : 'Could not save mortgage product.');
     } finally {
       this.saving$.next(false);
     }
@@ -211,15 +220,15 @@ export class PropertiesComponent implements OnInit, OnDestroy {
     if (!target) return;
     this.deleteTarget$.next(null);
     try {
-      await this.api.properties.delete(target.id);
-      this.toast.success('Deleted', 'Property removed.');
+      await this.api.mortgages.delete(target.id);
+      this.toast.success('Deleted', 'Mortgage product removed.');
       // If the last row on the final page was removed, step back a page.
-      if (this.properties$.value.length === 1 && this.offset$.value > 0) {
+      if (this.products$.value.length === 1 && this.offset$.value > 0) {
         this.offset$.next(Math.max(0, this.offset$.value - PAGE_SIZE));
       }
       void this.reload();
     } catch (err) {
-      this.toast.error('Error', err instanceof Error ? err.message : 'Could not delete property.');
+      this.toast.error('Error', err instanceof Error ? err.message : 'Could not delete mortgage product.');
     }
   }
 }

@@ -324,50 +324,58 @@ export interface MessageStats {
   topChats: Array<{ chatId: string; messageCount: number }>;
 }
 
-// ── Properties (real-estate "product list", ported from the AI-automation project) ──
-export type PropertyStatus = 'available' | 'reserved' | 'sold';
+// ── Mortgage products (the UK broker's "product list") ──
+export type MortgageProductStatus = 'available' | 'withdrawn';
+export type MortgageCategory =
+  | 'residential'
+  | 'first-time-buyer'
+  | 'home-mover'
+  | 'remortgage'
+  | 'buy-to-let';
+export type RateType = 'fixed' | 'tracker' | 'discount' | 'variable';
+export type RepaymentType = 'repayment' | 'interest-only';
 
-export interface Property {
+export interface MortgageProduct {
   id: string;
-  name: string;
-  area: string;
-  type: string;
-  bedrooms: number;
-  priceAed: number;
-  priceUsd: number;
-  roiPercent: number;
-  status: PropertyStatus;
-  handoverDate?: string | null;
-  isOffplan: boolean;
-  developer?: string | null;
+  lender: string;
+  productName: string;
+  category: MortgageCategory | string;
+  rateType: RateType | string;
+  initialRate: number;
+  initialPeriodMonths: number;
+  followOnRate?: number | null;
+  maxLtvPercent: number;
+  maxTermYears: number;
+  productFee: number;
+  repaymentType: RepaymentType | string;
+  ercApplies: boolean;
+  status: MortgageProductStatus | string;
   description?: string | null;
-  brochureUrl?: string | null;
-  imageUrl?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export interface PropertyPage {
-  data: Property[];
+export interface MortgageProductPage {
+  data: MortgageProduct[];
   total: number;
 }
 
 /** Create/update payload — the server fills id/timestamps and defaults. */
-export interface PropertyPayload {
-  name: string;
-  area: string;
-  type: string;
-  bedrooms?: number;
-  priceAed?: number;
-  priceUsd: number;
-  roiPercent?: number;
-  status?: PropertyStatus;
-  handoverDate?: string | null;
-  isOffplan?: boolean;
-  developer?: string | null;
+export interface MortgageProductPayload {
+  lender: string;
+  productName: string;
+  category?: MortgageCategory | string;
+  rateType?: RateType | string;
+  initialRate: number;
+  initialPeriodMonths?: number;
+  followOnRate?: number | null;
+  maxLtvPercent?: number;
+  maxTermYears?: number;
+  productFee?: number;
+  repaymentType?: RepaymentType | string;
+  ercApplies?: boolean;
+  status?: MortgageProductStatus | string;
   description?: string | null;
-  brochureUrl?: string | null;
-  imageUrl?: string | null;
 }
 
 // ── AI lead qualification (per session+chat, powers the Hot/Warm/Cold marking) ──

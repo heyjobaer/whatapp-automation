@@ -14,9 +14,9 @@ import type {
   MessageResponse,
   MessageStats,
   MessageTemplate,
-  Property,
-  PropertyPage,
-  PropertyPayload,
+  MortgageProduct,
+  MortgageProductPage,
+  MortgageProductPayload,
   ChatLead,
   AiSettingsView,
   AiSettingsUpdate,
@@ -297,22 +297,23 @@ export class ApiService {
     update: (data: AiSettingsUpdate) => request<AiSettingsView>('/ai/settings', { method: 'PUT', body: JSON.stringify(data) }),
   };
 
-  /** Real-estate "product list" CRUD (ported from the AI-automation project). */
-  readonly properties = {
+  /** Mortgage product ("product list") CRUD. */
+  readonly mortgages = {
     list: (params?: { limit?: number; offset?: number; search?: string }) => {
       const query = new URLSearchParams();
       if (params?.limit != null) query.set('limit', String(params.limit));
       if (params?.offset != null) query.set('offset', String(params.offset));
       if (params?.search) query.set('search', params.search);
       const queryStr = query.toString();
-      return request<PropertyPage>(`/properties${queryStr ? `?${queryStr}` : ''}`);
+      return request<MortgageProductPage>(`/mortgages${queryStr ? `?${queryStr}` : ''}`);
     },
-    get: (id: string) => request<Property>(`/properties/${id}`),
-    create: (data: PropertyPayload) => request<Property>('/properties', { method: 'POST', body: JSON.stringify(data) }),
-    update: (id: string, data: Partial<PropertyPayload>) =>
-      request<Property>(`/properties/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    get: (id: string) => request<MortgageProduct>(`/mortgages/${id}`),
+    create: (data: MortgageProductPayload) =>
+      request<MortgageProduct>('/mortgages', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<MortgageProductPayload>) =>
+      request<MortgageProduct>(`/mortgages/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     setStatus: (id: string, status: string) =>
-      request<Property>(`/properties/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
-    delete: (id: string) => request<void>(`/properties/${id}`, { method: 'DELETE' }),
+      request<MortgageProduct>(`/mortgages/${id}/status`, { method: 'PATCH', body: JSON.stringify({ status }) }),
+    delete: (id: string) => request<void>(`/mortgages/${id}`, { method: 'DELETE' }),
   };
 }

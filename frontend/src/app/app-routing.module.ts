@@ -17,7 +17,7 @@ const routes: Routes = [
       { path: '', loadChildren: () => import('./pages/dashboard/dashboard.module').then(m => m.DashboardModule) },
       { path: 'sessions', loadChildren: () => import('./pages/sessions/sessions.module').then(m => m.SessionsModule) },
       { path: 'chats', loadChildren: () => import('./pages/chats/chats.module').then(m => m.ChatsModule) },
-      { path: 'properties', loadChildren: () => import('./pages/properties/properties.module').then(m => m.PropertiesModule) },
+      { path: 'mortgages', loadChildren: () => import('./pages/mortgages/mortgages.module').then(m => m.MortgagesModule) },
       { path: 'leads', loadChildren: () => import('./pages/leads/leads.module').then(m => m.LeadsModule) },
       {
         path: 'ai-settings',

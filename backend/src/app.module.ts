@@ -8,7 +8,7 @@ import configuration from './config/configuration';
 import { validateEnv } from './config/env.validation';
 import { SessionModule } from './modules/session/session.module';
 import { MessageModule } from './modules/message/message.module';
-import { PropertiesModule } from './modules/properties/properties.module';
+import { MortgagesModule } from './modules/mortgages/mortgages.module';
 import { LeadsModule } from './modules/leads/leads.module';
 // Temporarily disabled (kept in code). Template/Webhook are still wired internally via
 // MessageModule / SessionModule / AgentToolsModule; their HTTP controllers are commented out in
@@ -131,7 +131,7 @@ if (dashboardServingEnabled && dashboardBuildPresent) {
     EngineModule,
     SessionModule,
     MessageModule,
-    PropertiesModule,
+    MortgagesModule,
     LeadsModule,
     // Temporarily disabled (kept in code): Template/Webhook/Infra removed from the app module.
     // TemplateModule,

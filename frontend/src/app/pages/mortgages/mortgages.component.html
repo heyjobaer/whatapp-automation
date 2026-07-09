@@ -1,14 +1,14 @@
 @if (vm$ | async; as vm) {
   <div class="properties-page">
-    <app-page-header title="Properties" subtitle="The AI uses this data to answer customers">
+    <app-page-header title="Mortgages" subtitle="Your product panel — the AI uses this to answer clients">
       <span badge>
-        <span class="count-badge">{{ vm.total }} total</span>
+        <span class="count-badge">{{ vm.total }} products</span>
       </span>
       <div actions>
         @if (vm.canWrite) {
           <button class="btn-primary" (click)="openNew()">
             <lucide-icon name="plus" [size]="18" />
-            Add property
+            Add product
           </button>
         }
       </div>
@@ -17,7 +17,7 @@
     @if (vm.loadError) {
       <div class="error-banner" role="alert">
         <lucide-icon name="alert-circle" [size]="20" />
-        <span class="error-banner-text">Failed to load properties.</span>
+        <span class="error-banner-text">Failed to load mortgage products.</span>
       </div>
     }
 
@@ -27,7 +27,7 @@
           <lucide-icon name="search" [size]="18" />
           <input
             type="text"
-            placeholder="Search name, area or developer…"
+            placeholder="Search lender, product or category…"
             [ngModel]="vm.searchTerm"
             (ngModelChange)="setSearch($event)"
           />
@@ -39,36 +39,36 @@
           <div class="table-loading">
             <lucide-icon name="loader-2" class="animate-spin" [size]="28" />
           </div>
-        } @else if (vm.properties.length === 0) {
+        } @else if (vm.products.length === 0) {
           <div class="empty-table-state">
-            <lucide-icon name="building-2" [size]="48" [strokeWidth]="1" />
-            <h3>No properties yet</h3>
-            <p>Add your first property — the AI will use it to answer customers.</p>
+            <lucide-icon name="landmark" [size]="48" [strokeWidth]="1" />
+            <h3>No mortgage products yet</h3>
+            <p>Add your first product — the AI will use it to answer clients.</p>
           </div>
         } @else {
           <table class="props-table">
             <thead>
               <tr class="table-row header">
-                <th>Property</th>
-                <th>Area</th>
-                <th>Type</th>
-                <th>Price (USD)</th>
-                <th>ROI</th>
+                <th>Product</th>
+                <th>Category</th>
+                <th>Rate</th>
+                <th>Max LTV</th>
+                <th>Fee</th>
                 <th>Status</th>
                 <th style="width: 6rem"></th>
               </tr>
             </thead>
             <tbody>
-              @for (p of vm.properties; track p.id) {
+              @for (p of vm.products; track p.id) {
                 <tr class="table-row">
                   <td>
-                    <div class="prop-name">{{ p.name }}</div>
-                    <div class="prop-sub">{{ p.developer || '—' }} · {{ p.bedrooms }}BR</div>
+                    <div class="prop-name">{{ p.lender }} {{ p.productName }}</div>
+                    <div class="prop-sub">{{ p.rateType }} · {{ periodLabel(p.initialPeriodMonths) }} · {{ p.repaymentType }}</div>
                   </td>
-                  <td>{{ p.area }}</td>
-                  <td>{{ p.type }}</td>
-                  <td class="prop-price">${{ p.priceUsd.toLocaleString() }}</td>
-                  <td>{{ p.roiPercent }}%</td>
+                  <td>{{ p.category }}</td>
+                  <td class="prop-price">{{ p.initialRate }}%</td>
+                  <td>{{ p.maxLtvPercent }}%</td>
+                  <td>{{ p.productFee ? ('£' + p.productFee.toLocaleString()) : 'Fee-free' }}</td>
                   <td>
                     <span class="status-badge {{ statusClass(p.status) }}">{{ p.status }}</span>
                   </td>
@@ -117,52 +117,68 @@
       <div class="modal-overlay" (click)="closeDialog()">
         <div class="modal modal-lg" (click)="$event.stopPropagation()">
           <div class="modal-header">
-            <h2>{{ vm.editingId ? 'Edit property' : 'Add new property' }}</h2>
+            <h2>{{ vm.editingId ? 'Edit mortgage product' : 'Add mortgage product' }}</h2>
             <button class="btn-icon" (click)="closeDialog()">
               <lucide-icon name="x" [size]="20" />
             </button>
           </div>
           <div class="modal-body">
             <div class="form-grid">
-              <div class="form-group col-span-2">
-                <label>Property name *</label>
-                <input type="text" [(ngModel)]="form.name" placeholder="Emaar Beachfront — Marina Vista" />
+              <div class="form-group">
+                <label>Lender *</label>
+                <input type="text" [(ngModel)]="form.lender" placeholder="Nationwide" />
               </div>
               <div class="form-group">
-                <label>Area *</label>
-                <input type="text" [(ngModel)]="form.area" placeholder="Dubai Marina" />
+                <label>Product name *</label>
+                <input type="text" [(ngModel)]="form.productName" placeholder="5 Year Fixed" />
               </div>
               <div class="form-group">
-                <label>Type *</label>
-                <select [(ngModel)]="form.type">
-                  @for (t of types; track t) {
+                <label>Category</label>
+                <select [(ngModel)]="form.category">
+                  @for (c of categories; track c) {
+                    <option [value]="c">{{ c }}</option>
+                  }
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Rate type</label>
+                <select [(ngModel)]="form.rateType">
+                  @for (t of rateTypes; track t) {
                     <option [value]="t">{{ t }}</option>
                   }
                 </select>
               </div>
               <div class="form-group">
-                <label>Bedrooms</label>
-                <input type="number" min="0" [(ngModel)]="form.bedrooms" />
+                <label>Initial rate % *</label>
+                <input type="number" step="0.01" min="0" [(ngModel)]="form.initialRate" />
               </div>
               <div class="form-group">
-                <label>Price USD *</label>
-                <input type="number" min="0" [(ngModel)]="form.priceUsd" />
+                <label>Initial period (months)</label>
+                <input type="number" min="0" [(ngModel)]="form.initialPeriodMonths" />
               </div>
               <div class="form-group">
-                <label>Price AED</label>
-                <input type="number" min="0" [(ngModel)]="form.priceAed" />
+                <label>Reversion (SVR) %</label>
+                <input type="number" step="0.01" min="0" [(ngModel)]="form.followOnRate" />
               </div>
               <div class="form-group">
-                <label>ROI %</label>
-                <input type="number" step="0.1" [(ngModel)]="form.roiPercent" />
+                <label>Max LTV %</label>
+                <input type="number" min="0" max="100" [(ngModel)]="form.maxLtvPercent" />
               </div>
               <div class="form-group">
-                <label>Developer</label>
-                <input type="text" [(ngModel)]="form.developer" placeholder="Emaar" />
+                <label>Max term (years)</label>
+                <input type="number" min="0" [(ngModel)]="form.maxTermYears" />
               </div>
               <div class="form-group">
-                <label>Handover date</label>
-                <input type="text" [(ngModel)]="form.handoverDate" placeholder="Ready Now · Q4 2026" />
+                <label>Product fee (£)</label>
+                <input type="number" min="0" [(ngModel)]="form.productFee" />
+              </div>
+              <div class="form-group">
+                <label>Repayment type</label>
+                <select [(ngModel)]="form.repaymentType">
+                  @for (r of repaymentTypes; track r) {
+                    <option [value]="r">{{ r }}</option>
+                  }
+                </select>
               </div>
               <div class="form-group">
                 <label>Status</label>
@@ -174,8 +190,8 @@
               </div>
               <div class="form-group checkbox-group">
                 <label class="checkbox-label">
-                  <input type="checkbox" [(ngModel)]="form.isOffplan" />
-                  Off-plan property
+                  <input type="checkbox" [(ngModel)]="form.ercApplies" />
+                  Early repayment charge applies
                 </label>
               </div>
               <div class="form-group col-span-2">
@@ -183,7 +199,7 @@
                 <textarea
                   rows="3"
                   [(ngModel)]="form.description"
-                  placeholder="Stunning sea-view apartment in the heart of Dubai Marina…"
+                  placeholder="Five-year fixed for home movers up to 90% LTV…"
                 ></textarea>
               </div>
             </div>
@@ -197,7 +213,7 @@
               @if (vm.saving) {
                 <lucide-icon name="loader-2" class="animate-spin" [size]="16" />
               } @else {
-                {{ vm.editingId ? 'Update' : 'Add property' }}
+                {{ vm.editingId ? 'Update' : 'Add product' }}
               }
             </button>
           </div>
@@ -210,7 +226,7 @@
       <div class="modal-overlay" (click)="setDeleteTarget(null)">
         <div class="modal confirm-modal" (click)="$event.stopPropagation()">
           <div class="modal-header">
-            <h2>Delete property</h2>
+            <h2>Delete mortgage product</h2>
             <button class="btn-icon" (click)="setDeleteTarget(null)">
               <lucide-icon name="x" [size]="20" />
             </button>
@@ -219,7 +235,7 @@
             <div class="confirm-icon-wrapper">
               <lucide-icon name="alert-triangle" [size]="48" class="confirm-warning-icon" />
             </div>
-            <p class="confirm-message">Delete <strong>{{ target.name }}</strong>? This cannot be undone.</p>
+            <p class="confirm-message">Delete <strong>{{ target.lender }} {{ target.productName }}</strong>? This cannot be undone.</p>
           </div>
           <div class="modal-footer">
             <button class="btn-secondary" (click)="setDeleteTarget(null)">Cancel</button>
