@@ -124,6 +124,12 @@ export class ApiService {
       }),
     // AI lead-qualification state for every chat in the session (Hot/Warm/Cold marking).
     getLeads: (id: string) => request<ChatLead[]>(`/sessions/${id}/leads`),
+    // Per-chat "Disable AI reply" toggle (ADMIN). true = AI stays silent for this chat.
+    setDisableAiReply: (id: string, chatId: string, disableAiReply: boolean) =>
+      request<ChatLead>(`/sessions/${id}/leads/${encodeURIComponent(chatId)}/disable-ai-reply`, {
+        method: 'PUT',
+        body: JSON.stringify({ disableAiReply }),
+      }),
     getChatMessages: (id: string, chatId: string, limit = 100) =>
       request<{ messages: ChatMessage[]; total: number }>(
         `/sessions/${id}/messages?chatId=${encodeURIComponent(chatId)}&limit=${limit}`,

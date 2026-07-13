@@ -120,6 +120,21 @@
                     </span>
                   }
                 }
+                @if (vm.canWrite) {
+                  <label
+                    class="ai-reply-toggle"
+                    [class.on]="isAiDisabled(chat.id)"
+                    [title]="'chats.aiReply.hint' | translate"
+                  >
+                    <input
+                      type="checkbox"
+                      [checked]="isAiDisabled(chat.id)"
+                      (change)="toggleDisableAiReply(chat.id)"
+                    />
+                    <span class="ai-reply-track"><span class="ai-reply-thumb"></span></span>
+                    <span class="ai-reply-text">{{ 'chats.aiReply.label' | translate }}</span>
+                  </label>
+                }
               </header>
 
               <div class="room-messages" #messagesContainer>

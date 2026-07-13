@@ -1154,3 +1154,54 @@
   background: rgba(255, 255, 255, 0.22);
   color: #ffffff;
 }
+
+/* Per-chat "Disable AI reply" toggle in the room header. */
+.chats-page .ai-reply-toggle {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+.chats-page .ai-reply-toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.chats-page .ai-reply-track {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.35);
+  transition: background 0.15s ease;
+  flex: 0 0 auto;
+}
+.chats-page .ai-reply-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #ffffff;
+  transition: transform 0.15s ease;
+}
+.chats-page .ai-reply-toggle.on .ai-reply-track {
+  background: #ef4444;
+}
+.chats-page .ai-reply-toggle.on .ai-reply-thumb {
+  transform: translateX(16px);
+}
+.chats-page .ai-reply-text {
+  font-size: 0.75rem;
+  color: #ffffff;
+  opacity: 0.95;
+}
+.chats-page .ai-reply-toggle input:focus-visible + .ai-reply-track {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}

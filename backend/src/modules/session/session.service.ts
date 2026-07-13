@@ -34,6 +34,7 @@ import { WebhookService } from '../webhook/webhook.service';
 import { HookManager } from '../../core/hooks';
 import { AiService } from '../ai/ai.service';
 import { AiSettingsService } from '../ai/ai-settings.service';
+import { LeadService } from '../leads/lead.service';
 import {
   deliveryStatusToMessageStatus,
   deliveryStatusToAck,
@@ -142,6 +143,7 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     private readonly hookManager: HookManager,
     private readonly aiService: AiService,
     private readonly aiSettings: AiSettingsService,
+    private readonly leads: LeadService,
     @Optional()
     private readonly configService?: ConfigService,
   ) {}
@@ -476,6 +478,14 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
     const settings = await this.aiSettings.get();
     if (!settings.autoReplyEnabled || !settings.apiKey) return;
 
+    // Per-chat override: an admin can silence the AI for this one conversation (to take it over
+    // manually) via the "Disable AI reply" toggle, without touching the global auto-reply. Defaults
+    // to enabled (not disabled) for new chats.
+    if (await this.leads.isReplyDisabled(id, incoming.chatId)) {
+      this.logger.debug(`AI reply disabled for chat ${incoming.chatId} (session ${id}); skipping auto-reply`);
+      return;
+    }
+
     try {
       // Reply after a human-like delay (default 20–30s) instead of instantly. The LLM call counts
       // toward the window, so the reply lands roughly `delay` seconds after the customer's message.
@@ -487,14 +497,43 @@ export class SessionService implements OnModuleDestroy, OnModuleInit, OnApplicat
       const phone = await this.resolveLeadPhone(id, incoming);
 
       const reply = await this.aiService.getReply(id, incoming.chatId, phone);
-      if (!reply) return;
+      console.log('AI reply:', reply);
+      if (!reply) {
+        this.logger.debug(`No AI reply generated for chat ${incoming.chatId} (session ${id}); nothing sent`);
+        return;
+      }
 
       const remainingMs = targetDelayMs - (Date.now() - startedAt);
       if (remainingMs > 0) await new Promise(resolve => setTimeout(resolve, remainingMs));
 
       // Re-check liveness: the delay + async AI call give a stop()/delete() time to retire this engine.
       if (!this.isLiveEngine(id, engine)) return;
-      await engine.sendTextMessage(incoming.chatId, reply);
+      const sent = await engine.sendTextMessage(incoming.chatId, reply);
+
+      // Persist our AI reply as an OUTGOING row so it becomes part of the chat history the model reads
+      // on the NEXT turn. Without this the model never sees its own prior replies, so it reintroduces
+      // itself and re-asks the same questions every message. message_create does NOT persist auto-replies
+      // (see onMessageCreate), and this send never goes through the REST path, so this is the only writer
+      // — no double-persist. Best-effort: a failure here must not break the (already sent) reply.
+      try {
+        await this.knex('messages').insert({
+          sessionId: id,
+          waMessageId: sent.id,
+          chatId: incoming.chatId,
+          from: incoming.to,
+          to: incoming.chatId,
+          body: reply,
+          type: 'text',
+          direction: MessageDirection.OUTGOING,
+          timestamp: sent.timestamp,
+          status: MessageStatus.SENT,
+          metadata: null,
+        });
+      } catch (err) {
+        if (!isUniqueConstraintError(err)) {
+          this.logger.error(`Failed to persist AI auto-reply for ${id} chat ${incoming.chatId}`, String(err));
+        }
+      }
     } catch (err) {
       this.logger.error(`AI auto-reply failed for ${id} chat ${incoming.chatId}`, String(err));
     }

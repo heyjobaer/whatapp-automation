@@ -391,6 +391,8 @@ export interface ChatLead {
   propType?: string | null;
   isLead: boolean;
   leadScore: number;
+  /** Per-chat "Disable AI reply" toggle. Defaults to false (AI replies); when true the AI stays silent. */
+  disableAiReply: boolean;
   createdAt?: string;
   updatedAt?: string;
 }

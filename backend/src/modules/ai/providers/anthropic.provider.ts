@@ -44,6 +44,12 @@ export class AnthropicProvider implements LlmProvider {
     const response = await this.client.messages.create({
       model,
       max_tokens: maxTokens,
+      // Disable extended thinking. On Claude Sonnet 5 / Opus 4.7+ adaptive thinking is ON by default
+      // when `thinking` is omitted, and thinking tokens count against max_tokens — with our small
+      // reply budget the model can spend the whole budget "thinking" and return an empty text block
+      // (no reply). These are short, WhatsApp-style replies that don't need it, so turn it off to
+      // guarantee the budget goes to the visible answer.
+      thinking: { type: 'disabled' },
       // Cache the system prompt (it carries the full property list, identical across replies).
       system: [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }],
       messages: turns.map(m => ({ role: m.role, content: m.content })),

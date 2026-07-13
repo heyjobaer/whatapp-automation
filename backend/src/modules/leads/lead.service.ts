@@ -14,6 +14,8 @@ export interface ChatLead {
   propType: string | null;
   isLead: boolean;
   leadScore: number;
+  /** Per-chat "Disable AI reply" toggle. Defaults to false (AI replies); when true the AI stays silent. */
+  disableAiReply: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -51,6 +53,28 @@ export class LeadService {
 
   async listForSession(sessionId: string): Promise<ChatLead[]> {
     return this.knex<ChatLead>(TABLE).where({ sessionId }).orderBy('leadScore', 'desc');
+  }
+
+  /**
+   * Whether the AI reply is disabled for this chat. Defaults to false when no lead row exists yet
+   * (a brand-new chat replies normally), so this only returns true when an admin has toggled it on.
+   */
+  async isReplyDisabled(sessionId: string, chatId: string): Promise<boolean> {
+    const lead = await this.get(sessionId, chatId);
+    return lead ? lead.disableAiReply : false;
+  }
+
+  /**
+   * Admin toggle: set the "Disable AI reply" flag for a single chat. Creates the lead row on demand
+   * (so a chat that has never had an AI reply can still be pre-disabled) and returns the updated row.
+   */
+  async setDisableAiReply(sessionId: string, chatId: string, disableAiReply: boolean): Promise<ChatLead> {
+    await this.getOrCreate(sessionId, chatId);
+    const [updated] = await this.knex<ChatLead>(TABLE)
+      .where({ sessionId, chatId })
+      .update({ disableAiReply, updatedAt: this.knex.fn.now() })
+      .returning('*');
+    return updated;
   }
 
   /**

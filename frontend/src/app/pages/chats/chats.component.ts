@@ -103,6 +103,9 @@ export class ChatsComponent implements OnInit, OnDestroy {
   // AI lead qualification per chat, keyed by chatId (drives the Hot/Warm badges).
   readonly leads$ = new BehaviorSubject<Record<string, ChatLead>>({});
 
+  // Chats with an in-flight "Disable AI reply" toggle request, so a double-click can't double-fire.
+  private readonly aiToggleBusy = new Set<string>();
+
   @ViewChild('fileInput') private fileInputRef?: ElementRef<HTMLInputElement>;
   @ViewChild('messagesContainer') private messagesContainerRef?: ElementRef<HTMLDivElement>;
 
@@ -232,6 +235,31 @@ export class ChatsComponent implements OnInit, OnDestroy {
   /** Hot ≥ 70, Warm ≥ 40, otherwise Cold. Used for the lead badge in the list + room header. */
   leadStatus(score: number): 'hot' | 'warm' | 'cold' {
     return score >= 70 ? 'hot' : score >= 40 ? 'warm' : 'cold';
+  }
+
+  /** Current "Disable AI reply" state for a chat (defaults to false when no lead row exists yet). */
+  isAiDisabled(chatId: string): boolean {
+    return this.leads$.value[chatId]?.disableAiReply ?? false;
+  }
+
+  /**
+   * Admin toggle: flip the "Disable AI reply" flag for one chat. Updates the local leads map from the
+   * server's returned row so the switch reflects the persisted state. Guarded so a double-click can't
+   * fire two in-flight requests for the same chat.
+   */
+  async toggleDisableAiReply(chatId: string): Promise<void> {
+    const sessionId = this.selectedSessionId$.value;
+    if (!sessionId || this.aiToggleBusy.has(chatId)) return;
+    const next = !this.isAiDisabled(chatId);
+    this.aiToggleBusy.add(chatId);
+    try {
+      const lead = await this.api.sessions.setDisableAiReply(sessionId, chatId, next);
+      this.leads$.next({ ...this.leads$.value, [chatId]: lead });
+    } catch (err) {
+      this.toast.error(this.lang.t('chats.aiReply.toggleError'), err instanceof Error ? err.message : undefined);
+    } finally {
+      this.aiToggleBusy.delete(chatId);
+    }
   }
 
   // ── Template setters ──
