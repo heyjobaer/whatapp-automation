@@ -6,7 +6,6 @@
           <lucide-icon [name]="vm.isMobileOpen ? 'x' : 'menu'" [size]="24" />
         </button>
         <div class="mobile-brand">
-          <img src="/openwa_logo.webp" alt="OpenWA" class="sidebar-logo" />
           <span class="brand-name">{{ 'common.appName' | translate }}</span>
         </div>
         <div style="width: 40px"></div>
@@ -24,7 +23,6 @@
       [class.open]="vm.isMobileOpen"
     >
       <div class="sidebar-header">
-        <img src="/openwa_logo.webp" alt="OpenWA" class="sidebar-logo" />
         @if (!vm.isCollapsed) {
           <div class="sidebar-brand">
             <span class="brand-name">{{ 'common.appName' | translate }}</span>

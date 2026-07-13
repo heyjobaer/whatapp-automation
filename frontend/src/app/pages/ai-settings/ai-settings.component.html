@@ -86,10 +86,17 @@
         <div class="divider"></div>
 
         <!-- Persona -->
-        <div class="field">
-          <label>Agency name</label>
-          <input type="text" [(ngModel)]="agencyName" name="agencyName" placeholder="Your mortgage brokerage" />
-          <span class="hint">Used in the AI's persona (“I'm your … consultant”).</span>
+        <div class="grid">
+          <div class="field">
+            <label>Agency name</label>
+            <input type="text" [(ngModel)]="agencyName" name="agencyName" placeholder="Your mortgage brokerage" />
+            <span class="hint">Your brokerage name, used in the AI's intro.</span>
+          </div>
+          <div class="field">
+            <label>Adviser name</label>
+            <input type="text" [(ngModel)]="assistantName" name="assistantName" placeholder="e.g. Sarah" />
+            <span class="hint">The human first name the AI introduces itself with (“Hi, this is Sarah from …”). Leave blank to use the agency name only.</span>
+          </div>
         </div>
 
         <div class="field">

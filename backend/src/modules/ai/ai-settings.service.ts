@@ -12,6 +12,7 @@ export interface AiSettings {
   replyDelayMinMs: number;
   replyDelayMaxMs: number;
   agencyName: string | null;
+  assistantName: string | null;
   systemPrompt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -28,6 +29,7 @@ export type AiSettingsUpdate = Partial<
     | 'replyDelayMinMs'
     | 'replyDelayMaxMs'
     | 'agencyName'
+    | 'assistantName'
     | 'systemPrompt'
   >
 >;
@@ -60,6 +62,7 @@ export class AiSettingsService {
       replyDelayMinMs: num(process.env.AI_REPLY_DELAY_MIN_MS, 20000),
       replyDelayMaxMs: num(process.env.AI_REPLY_DELAY_MAX_MS, 30000),
       agencyName: process.env.AGENCY_NAME?.trim() || null,
+      assistantName: process.env.ASSISTANT_NAME?.trim() || null,
       systemPrompt: process.env.AI_SYSTEM_PROMPT?.trim() || null,
     };
   }
@@ -68,6 +71,7 @@ export class AiSettingsService {
   async get(): Promise<AiSettings> {
     if (this.cache) return this.cache;
     let row = await this.knex<AiSettings>(TABLE).orderBy('createdAt', 'asc').first();
+    console.log('row', row);
     if (!row) {
       [row] = await this.knex<AiSettings>(TABLE).insert(this.seedFromEnv()).returning('*');
       this.logger.log('Seeded ai_settings from environment');

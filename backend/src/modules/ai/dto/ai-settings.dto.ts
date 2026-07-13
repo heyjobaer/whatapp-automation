@@ -42,6 +42,12 @@ export class UpdateAiSettingsDto {
   @MaxLength(200)
   agencyName?: string;
 
+  @ApiPropertyOptional({ description: 'Human first name the AI introduces itself with', example: 'Sarah' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  assistantName?: string;
+
   @ApiPropertyOptional({ description: 'Full system-prompt override (optional)' })
   @IsOptional()
   @IsString()

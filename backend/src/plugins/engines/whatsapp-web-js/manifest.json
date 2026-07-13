@@ -4,7 +4,7 @@
     "version": "1.0.0",
     "type": "engine",
     "description": "Official WhatsApp-web.js engine adapter for OpenWA",
-    "author": "OpenWA Team",
+    "author": "WhatsApp Automation Team",
     "main": "index.ts",
     "provides": [
         "whatsapp-engine",

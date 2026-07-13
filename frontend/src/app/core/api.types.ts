@@ -403,6 +403,7 @@ export interface AiSettingsView {
   replyDelayMinMs: number;
   replyDelayMaxMs: number;
   agencyName: string | null;
+  assistantName: string | null;
   systemPrompt: string | null;
   apiKeySet: boolean;
   apiKeyPreview: string | null;
@@ -417,5 +418,6 @@ export interface AiSettingsUpdate {
   replyDelayMinMs?: number;
   replyDelayMaxMs?: number;
   agencyName?: string | null;
+  assistantName?: string | null;
   systemPrompt?: string | null;
 }

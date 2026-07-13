@@ -6,7 +6,7 @@
     }
   },
   "common": {
-    "appName": "OpenWA",
+    "appName": "WhatsApp Automation",
     "appSubtitle": "WhatsApp API",
     "loading": "Chargement...",
     "save": "Enregistrer",

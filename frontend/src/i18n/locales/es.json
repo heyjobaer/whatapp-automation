@@ -6,7 +6,7 @@
     }
   },
   "common": {
-    "appName": "OpenWA",
+    "appName": "WhatsApp Automation",
     "appSubtitle": "API de WhatsApp",
     "loading": "Cargando...",
     "save": "Guardar",

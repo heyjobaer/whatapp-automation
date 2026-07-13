@@ -72,6 +72,7 @@ export class AiSettingsComponent implements OnInit {
   replyDelayMinMs = 20000;
   replyDelayMaxMs = 30000;
   agencyName = '';
+  assistantName = '';
   systemPrompt = '';
 
   constructor(
@@ -130,6 +131,7 @@ export class AiSettingsComponent implements OnInit {
     this.replyDelayMinMs = s.replyDelayMinMs;
     this.replyDelayMaxMs = s.replyDelayMaxMs;
     this.agencyName = s.agencyName ?? '';
+    this.assistantName = s.assistantName ?? '';
     this.systemPrompt = s.systemPrompt ?? '';
     this.apiKey = ''; // never prefill the key; the preview is shown as a placeholder
   }
@@ -147,6 +149,7 @@ export class AiSettingsComponent implements OnInit {
       replyDelayMinMs: Number(this.replyDelayMinMs) || 0,
       replyDelayMaxMs: Number(this.replyDelayMaxMs) || 0,
       agencyName: this.agencyName.trim() || null,
+      assistantName: this.assistantName.trim() || null,
       systemPrompt: this.systemPrompt.trim() || null,
     };
     // Only send the API key when the admin typed a new one.

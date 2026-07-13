@@ -6,7 +6,7 @@
     }
   },
   "common": {
-    "appName": "OpenWA",
+    "appName": "WhatsApp Automation",
     "appSubtitle": "WhatsApp API",
     "loading": "正在加载...",
     "save": "保存",

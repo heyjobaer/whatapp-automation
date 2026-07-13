@@ -13,6 +13,7 @@ interface AiSettingsView {
   replyDelayMinMs: number;
   replyDelayMaxMs: number;
   agencyName: string | null;
+  assistantName: string | null;
   systemPrompt: string | null;
   apiKeySet: boolean;
   apiKeyPreview: string | null;
@@ -28,6 +29,7 @@ function toView(s: AiSettings): AiSettingsView {
     replyDelayMinMs: s.replyDelayMinMs,
     replyDelayMaxMs: s.replyDelayMaxMs,
     agencyName: s.agencyName,
+    assistantName: s.assistantName,
     systemPrompt: s.systemPrompt,
     apiKeySet: key.length > 0,
     apiKeyPreview: key ? `${'•'.repeat(Math.max(0, key.length - 4))}${key.slice(-4)}` : null,
